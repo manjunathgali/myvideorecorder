@@ -1,4 +1,4 @@
-const { Room, RoomEvent, Track } = LivekitClient;
+const { Room, RoomEvent, VideoPresets, Track } = LivekitClient;
 
 let room;
 let mediaRecorder;
@@ -8,34 +8,39 @@ async function start() {
     try {
         const identity = "user-" + Math.floor(Math.random() * 1000);
 
-        // 1. Fetch token from your secure Vercel API
+        // 1. Fetch token
         const response = await fetch(`/api/get-token?room=my-room&identity=${identity}`);
         if (!response.ok) throw new Error('Failed to get token from API');
-
         const { token } = await response.json();
 
-        room = new Room();
+        // 2. Initialize Room with Quality Presets
+        room = new Room({
+            adaptiveStream: true, // Scales quality based on bandwidth
+            dynacast: true        // Stops sending video if tile is hidden
+        });
 
-        // 2. Handle Remote Video (The other person)
+        // 3. Handle Remote Video (High Quality Subscription)
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
             if (track.kind === Track.Kind.Video) {
                 const remoteEl = document.getElementById('remote-video');
                 track.attach(remoteEl);
-                console.log("Remote video attached");
+                // Ensure the video element plays at the highest possible resolution
+                remoteEl.style.objectFit = "contain";
             }
         });
 
-        // 3. Connect to LiveKit Cloud
+        // 4. Connect to LiveKit Cloud
         await room.connect('wss://my-first-app-mwgdyws7.livekit.cloud', token);
-        console.log("Connected to room:", room.name);
 
-        // 4. Enable Camera and Mic
-        // This triggers the browser permission popup
-        await room.localParticipant.setCameraEnabled(true);
+        // 5. Publish Local Camera in 1080p
+        // VideoPresets.h1080 ensures the browser tries to capture 1920x1080
+        await room.localParticipant.setCameraEnabled(true, {
+            resolution: VideoPresets.h1080.resolution,
+            simulcast: true // Provides better stability for the remote person
+        });
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        // 5. Attach Local Video to the 'local-video' tile
-        // We find the published camera track and attach it
+        // 6. Attach Local Video
         const localPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (localPublication && localPublication.videoTrack) {
             localPublication.videoTrack.attach(document.getElementById('local-video'));
@@ -43,11 +48,11 @@ async function start() {
 
     } catch (error) {
         console.error("Setup Error:", error);
-        alert("Error: " + error.message); // Helpful for debugging on mobile
+        alert("Error: " + error.message);
     }
 }
 
-// --- Recording Logic (Unchanged but ensuring IDs exist) ---
+// --- High-Quality Recording Logic ---
 const startBtn = document.getElementById('start-btn');
 if (startBtn) {
     const stopBtn = document.getElementById('stop-btn');
@@ -56,28 +61,40 @@ if (startBtn) {
         const localVid = document.getElementById('local-video');
         const remoteVid = document.getElementById('remote-video');
 
+        // USE 1080p CANVAS: Setting this to 1920x1080 ensures no detail is lost
         const canvas = document.createElement('canvas');
-        canvas.width = 800;
-        canvas.height = 400;
-        const ctx = canvas.getContext('2d');
+        canvas.width = 1920;
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d', { alpha: false }); // Better performance
 
         function drawFrame() {
             if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
 
+            // Clear with black background
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw both videos side-by-side on the canvas
-            ctx.drawImage(localVid, 0, 50, 400, 300);
-            ctx.drawImage(remoteVid, 400, 50, 400, 300);
+            // Draw side-by-side (960px width each for a 1920px canvas)
+            // Center the 16:9 videos vertically in their 1080p height
+            ctx.drawImage(localVid, 0, 270, 960, 540);
+            ctx.drawImage(remoteVid, 960, 270, 960, 540);
 
             requestAnimationFrame(drawFrame);
         }
 
-        const stream = canvas.captureStream(30); // 30 FPS
+        const stream = canvas.captureStream(30); // Capture at 30 FPS
 
-        // Use a supported video format
-        const options = { mimeType: 'video/webm;codecs=vp8' };
+        // FORCE HIGH BITRATE & VP9: This is the biggest quality jump
+        // VP9 is ~50% more efficient than VP8, leading to much sharper files.
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+            ? 'video/webm;codecs=vp9'
+            : 'video/webm;codecs=vp8';
+
+        const options = {
+            mimeType: mimeType,
+            videoBitsPerSecond: 8000000 // 8 Mbps for crisp HD video
+        };
+
         mediaRecorder = new MediaRecorder(stream, options);
 
         mediaRecorder.ondataavailable = (e) => {
@@ -89,12 +106,12 @@ if (startBtn) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'meeting-recording.webm';
+            a.download = `meeting-HD-${new Date().toISOString()}.webm`;
             a.click();
             recordedChunks = [];
         };
 
-        mediaRecorder.start();
+        mediaRecorder.start(1000); // Slices data every 1s for safety
         drawFrame();
 
         startBtn.disabled = true;
