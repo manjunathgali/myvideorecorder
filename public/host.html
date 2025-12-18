@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LiveKit Host - Recording</title>
+  <style>
+    .video-grid { display: flex; gap: 20px; flex-wrap: wrap; background: #222; padding: 20px; border-radius: 8px; }
+    .tile { width: 400px; height: 300px; background: #000; border: 2px solid #444; border-radius: 4px; object-fit: cover; }
+    .controls { margin-top: 20px; }
+    button { padding: 10px 20px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<h2>Host Room (Recording Enabled)</h2>
+<div class="video-grid">
+  <video id="local-video" class="tile" autoplay muted playsinline></video>
+  <video id="remote-video" class="tile" autoplay playsinline></video>
+</div>
+
+<div class="controls">
+  <button id="start-btn">Start Recording</button>
+  <button id="stop-btn" disabled>Stop & Download</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

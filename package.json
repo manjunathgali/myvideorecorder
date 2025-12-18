@@ -1,0 +1,18 @@
+{
+  "name": "videorecorder",
+  "version": "1.0.0",
+  "description": "LiveKit Video Recorder App",
+  "main": "api/get-token.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/get-token.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "private": true,
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "livekit-server-sdk": "^2.15.0"
+  }
+}

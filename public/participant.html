@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LiveKit Participant</title>
+  <style>
+    .video-grid { display: flex; gap: 20px; flex-wrap: wrap; background: #222; padding: 20px; border-radius: 8px; }
+    .tile { width: 400px; height: 300px; background: #000; border: 2px solid #444; border-radius: 4px; object-fit: cover; }
+  </style>
+</head>
+<body>
+<h2>Participant Room</h2>
+<div class="video-grid">
+  <video id="local-video" class="tile" autoplay muted playsinline></video>
+  <video id="remote-video" class="tile" autoplay playsinline></video>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
