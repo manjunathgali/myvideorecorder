@@ -4,8 +4,14 @@ let room;
 let mediaRecorder;
 let recordedChunks = [];
 let audioCtx;
+let timerInterval;
+let secondsElapsed = 0;
 
-// Helper to create an audio meter
+// --- Network Stats Tracking ---
+let prevHostBytes = 0;
+let prevPartBytes = 0;
+
+// 1. Audio Meter Logic
 function createMeter(stream, meterId) {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const source = audioCtx.createMediaStreamSource(stream);
@@ -22,34 +28,84 @@ function createMeter(stream, meterId) {
         let sum = 0;
         for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
         let average = sum / bufferLength;
-        if (meterElement) meterElement.value = average * 1.5; // Scale for visibility
+        if (meterElement) meterElement.value = average * 1.5;
         requestAnimationFrame(update);
     }
     update();
 }
 
+// 2. Network Monitoring Logic (Fixed)
+function startNetworkMonitoring() {
+    setInterval(async () => {
+        if (!room) return;
+
+        // Host Stats
+        const localStats = await room.localParticipant.getStats();
+        localStats.forEach(stat => {
+            if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
+                const mbps = ((stat.bytesSent - prevHostBytes) * 8) / 1000000;
+                document.getElementById('h-bitrate').innerText = Math.max(0, mbps).toFixed(2) + " Mbps";
+                prevHostBytes = stat.bytesSent;
+            }
+        });
+
+        // Participant Stats
+        room.remoteParticipants.forEach(async (participant) => {
+            const stats = await participant.getStats();
+            stats.forEach(stat => {
+                if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
+                    const mbps = ((stat.bytesReceived - prevPartBytes) * 8) / 1000000;
+                    const jitter = stat.jitter * 1000;
+
+                    document.getElementById('p-bitrate').innerText = Math.max(0, mbps).toFixed(2) + " Mbps";
+                    const jitterEl = document.getElementById('p-jitter');
+                    jitterEl.innerText = jitter.toFixed(1) + " ms";
+                    jitterEl.style.color = jitter > 30 ? "#ff4444" : "#fff"; // Red warning
+                    prevPartBytes = stat.bytesReceived;
+                }
+                if (stat.type === 'remote-outbound-rtp' || stat.type === 'candidate-pair') {
+                    const rtt = (stat.currentRoundTripTime || stat.roundTripTime || 0) * 1000;
+                    if (rtt > 0) {
+                        const latEl = document.getElementById('p-latency');
+                        latEl.innerText = rtt.toFixed(0) + " ms";
+                        latEl.style.color = rtt > 200 ? "#ff4444" : "#fff";
+                        document.getElementById('h-latency').innerText = rtt.toFixed(0) + " ms";
+                    }
+                }
+            });
+        });
+    }, 1000);
+}
+
+// 3. Recording Timer Logic
+function updateTimer() {
+    secondsElapsed++;
+    const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+    const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+    const timerDisplay = document.getElementById('record-timer');
+    if (timerDisplay) timerDisplay.innerText = `REC ${mins}:${secs}`;
+}
+
 async function start() {
     try {
-        const identity = "user-" + Math.floor(Math.random() * 1000);
+        const identity = "host-" + Math.floor(Math.random() * 1000);
         const response = await fetch(`/api/get-token?room=my-room&identity=${identity}`);
         const { token } = await response.json();
 
         room = new Room({ adaptiveStream: true, dynacast: true });
 
-        // Handle Remote Video & Audio
-        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        room.on(RoomEvent.TrackSubscribed, (track) => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById('remote-video'));
             }
             if (track.kind === Track.Kind.Audio) {
-                const el = track.attach(); // Hidden audio element
+                track.attach(document.createElement('audio'));
                 createMeter(new MediaStream([track.mediaStreamTrack]), 'remote-meter');
             }
         });
 
         await room.connect('wss://my-first-app-mwgdyws7.livekit.cloud', token);
 
-        // Publish & Attach Local
         await room.localParticipant.setCameraEnabled(true, { resolution: VideoPresets.h1080.resolution });
         await room.localParticipant.setMicrophoneEnabled(true);
 
@@ -58,34 +114,30 @@ async function start() {
 
         const localAudio = room.localParticipant.getTrackPublication(Track.Source.Microphone).audioTrack;
         createMeter(new MediaStream([localAudio.mediaStreamTrack]), 'local-meter');
+
         startNetworkMonitoring();
     } catch (error) {
-        alert("Error: " + error.message);
+        alert("Setup Error: " + error.message);
     }
 }
 
-// --- Recording Logic ---
+// --- Recording Execution ---
 const startBtn = document.getElementById('start-btn');
-if (startBtn) {
-    const stopBtn = document.getElementById('stop-btn');
+const stopBtn = document.getElementById('stop-btn');
 
+if (startBtn) {
     startBtn.onclick = async () => {
         const localVid = document.getElementById('local-video');
         const remoteVid = document.getElementById('remote-video');
 
-        // 1. Setup HD Canvas
         const canvas = document.createElement('canvas');
         canvas.width = 1920; canvas.height = 1080;
         const ctx = canvas.getContext('2d', { alpha: false });
 
-        // 2. Setup Audio Mixer
         const dest = audioCtx.createMediaStreamDestination();
+        const localMic = room.localParticipant.getTrackPublication(Track.Source.Microphone).audioTrack;
+        audioCtx.createMediaStreamSource(new MediaStream([localMic.mediaStreamTrack])).connect(dest);
 
-        // Local Source
-        const localTrack = room.localParticipant.getTrackPublication(Track.Source.Microphone).audioTrack;
-        audioCtx.createMediaStreamSource(new MediaStream([localTrack.mediaStreamTrack])).connect(dest);
-
-        // Remote Source
         room.remoteParticipants.forEach(p => {
             p.getTrackPublications().forEach(pub => {
                 if (pub.audioTrack?.isSubscribed) {
@@ -94,19 +146,18 @@ if (startBtn) {
             });
         });
 
-        // 3. Combine Video + Mixed Audio
         const combinedStream = new MediaStream([
             ...canvas.captureStream(30).getVideoTracks(),
             ...dest.stream.getAudioTracks()
         ]);
 
-        function drawFrame() {
+        function draw() {
             if (mediaRecorder?.state !== 'recording') return;
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(localVid, 0, 270, 960, 540);
             ctx.drawImage(remoteVid, 960, 270, 960, 540);
-            requestAnimationFrame(drawFrame);
+            requestAnimationFrame(draw);
         }
 
         mediaRecorder = new MediaRecorder(combinedStream, {
@@ -116,64 +167,28 @@ if (startBtn) {
 
         mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
         mediaRecorder.onstop = () => {
+            clearInterval(timerInterval);
+            secondsElapsed = 0;
+            document.getElementById('record-timer').innerText = "00:00";
             const blob = new Blob(recordedChunks, { type: 'video/webm' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `HD-Meeting-Recording-${Date.now()}.webm`;
+            a.download = `Meeting-${Date.now()}.webm`;
             a.click();
             recordedChunks = [];
         };
 
         mediaRecorder.start(1000);
-        drawFrame();
+        draw();
+
+        // Start Timer
+        timerInterval = setInterval(updateTimer, 1000);
+
         startBtn.disabled = true;
         stopBtn.disabled = false;
     };
 
-    stopBtn.onclick = () => {
-        mediaRecorder.stop();
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-    };
+    stopBtn.onclick = () => mediaRecorder.stop();
 }
-
-
-// --- Network Monitoring Logic ---
-function startNetworkMonitoring() {
-    setInterval(async () => {
-        if (!room) return;
-
-        // 1. Get Host (Local) Stats
-        const localStats = await room.localParticipant.getStats();
-        localStats.forEach(stat => {
-            // We look for the outgoing video track
-            if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
-                const bitrate = (stat.bytesSent * 8) / 1000000; // Convert to Mbps
-                document.getElementById('h-bitrate').innerText = bitrate.toFixed(2) + " Mbps";
-            }
-        });
-
-        // 2. Get Participant (Remote) Stats
-        room.remoteParticipants.forEach(async (participant) => {
-            const stats = await participant.getStats();
-            stats.forEach(stat => {
-                // Look for inbound video from the participant
-                if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
-                    document.getElementById('p-bitrate').innerText = ((stat.bytesReceived * 8) / 1000000).toFixed(2) + " Mbps";
-                    document.getElementById('p-jitter').innerText = (stat.jitter * 1000).toFixed(1) + " ms";
-                }
-                // Look for round-trip-time (Latency)
-                if (stat.type === 'remote-outbound-rtp') {
-                    document.getElementById('p-latency').innerText = (stat.roundTripTime * 1000).toFixed(0) + " ms";
-                    // For the host, latency to server is usually similar
-                    document.getElementById('h-latency').innerText = (stat.roundTripTime * 1000).toFixed(0) + " ms";
-                }
-            });
-        });
-    }, 1000); // Update every second
-}
-
-// Call this at the end of your start() function
-
 
 start();
