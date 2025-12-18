@@ -12,9 +12,16 @@
 </head>
 <body>
 <h2>Host Room (Recording Enabled)</h2>
+
 <div class="video-grid">
-  <video id="local-video" class="tile" autoplay muted playsinline></video>
-  <video id="remote-video" class="tile" autoplay playsinline></video>
+  <div class="video-container">
+    <video id="local-video" class="tile" autoplay muted playsinline></video>
+    <div class="meter-label">My Mic: <progress id="local-meter" value="0" max="100"></progress></div>
+  </div>
+  <div class="video-container">
+    <video id="remote-video" class="tile" autoplay playsinline></video>
+    <div class="meter-label">Remote Mic: <progress id="remote-meter" value="0" max="100"></progress></div>
+  </div>
 </div>
 
 <div class="controls">
