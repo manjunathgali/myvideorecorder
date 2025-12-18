@@ -8,6 +8,21 @@
     .tile { width: 400px; height: 300px; background: #000; border: 2px solid #444; border-radius: 4px; object-fit: cover; }
     .controls { margin-top: 20px; }
     button { padding: 10px 20px; cursor: pointer; }
+
+    .stats-dashboard {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      font-family: monospace;
+      background: #111;
+      padding: 10px;
+      border-radius: 5px;
+      color: #0f0; /* Matrix green for stats */
+      font-size: 12px;
+    }
+    .stat-item { border-bottom: 1px solid #333; padding: 2px 0; }
+    .stat-value { color: #fff; float: right; }
   </style>
 </head>
 <body>
@@ -27,6 +42,21 @@
 <div class="controls">
   <button id="start-btn">Start Recording</button>
   <button id="stop-btn" disabled>Stop & Download</button>
+</div>
+
+<div class="stats-dashboard">
+  <div id="host-stats">
+    <strong>HOST (You)</strong>
+    <div class="stat-item">Bandwidth: <span id="h-bitrate" class="stat-value">0 Mbps</span></div>
+    <div class="stat-item">Latency: <span id="h-latency" class="stat-value">0 ms</span></div>
+    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">0 ms</span></div>
+  </div>
+  <div id="participant-stats">
+    <strong>PARTICIPANT</strong>
+    <div class="stat-item">Bandwidth: <span id="p-bitrate" class="stat-value">0 Mbps</span></div>
+    <div class="stat-item">Latency: <span id="p-latency" class="stat-value">0 ms</span></div>
+    <div class="stat-item">Jitter: <span id="p-jitter" class="stat-value">0 ms</span></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>

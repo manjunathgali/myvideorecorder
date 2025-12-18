@@ -58,7 +58,7 @@ async function start() {
 
         const localAudio = room.localParticipant.getTrackPublication(Track.Source.Microphone).audioTrack;
         createMeter(new MediaStream([localAudio.mediaStreamTrack]), 'local-meter');
-
+        startNetworkMonitoring();
     } catch (error) {
         alert("Error: " + error.message);
     }
@@ -136,5 +136,44 @@ if (startBtn) {
         stopBtn.disabled = true;
     };
 }
+
+
+// --- Network Monitoring Logic ---
+function startNetworkMonitoring() {
+    setInterval(async () => {
+        if (!room) return;
+
+        // 1. Get Host (Local) Stats
+        const localStats = await room.localParticipant.getStats();
+        localStats.forEach(stat => {
+            // We look for the outgoing video track
+            if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
+                const bitrate = (stat.bytesSent * 8) / 1000000; // Convert to Mbps
+                document.getElementById('h-bitrate').innerText = bitrate.toFixed(2) + " Mbps";
+            }
+        });
+
+        // 2. Get Participant (Remote) Stats
+        room.remoteParticipants.forEach(async (participant) => {
+            const stats = await participant.getStats();
+            stats.forEach(stat => {
+                // Look for inbound video from the participant
+                if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
+                    document.getElementById('p-bitrate').innerText = ((stat.bytesReceived * 8) / 1000000).toFixed(2) + " Mbps";
+                    document.getElementById('p-jitter').innerText = (stat.jitter * 1000).toFixed(1) + " ms";
+                }
+                // Look for round-trip-time (Latency)
+                if (stat.type === 'remote-outbound-rtp') {
+                    document.getElementById('p-latency').innerText = (stat.roundTripTime * 1000).toFixed(0) + " ms";
+                    // For the host, latency to server is usually similar
+                    document.getElementById('h-latency').innerText = (stat.roundTripTime * 1000).toFixed(0) + " ms";
+                }
+            });
+        });
+    }, 1000); // Update every second
+}
+
+// Call this at the end of your start() function
+
 
 start();
