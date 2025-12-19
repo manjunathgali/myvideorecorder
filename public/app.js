@@ -43,7 +43,7 @@ let lastTs = performance.now();
 
 function startNetworkMonitoring() {
     setInterval(async () => {
-        if (!room) return;
+        if (!room || !room.engine?.pcManager) return;
 
         const now = performance.now();
         const deltaSec = (now - lastTs) / 1000;
@@ -54,27 +54,25 @@ function startNetworkMonitoring() {
         let rttMs = 0;
         let jitterMs = 0;
 
-        const stats = await room.getStats();
+        const statsMap = await room.engine.pcManager.getStats();
 
-        stats.forEach(report => {
-            report.stats.forEach(stat => {
+        statsMap.forEach(stat => {
 
-                // Active ICE candidate
-                if (
-                    stat.type === "candidate-pair" &&
-                    stat.state === "succeeded" &&
-                    stat.nominated
-                ) {
-                    bytesSent += stat.bytesSent || 0;
-                    bytesRecv += stat.bytesReceived || 0;
-                    rttMs = (stat.currentRoundTripTime || 0) * 1000;
-                }
+            // ✅ Active ICE connection
+            if (
+                stat.type === "candidate-pair" &&
+                stat.state === "succeeded" &&
+                stat.nominated
+            ) {
+                bytesSent = stat.bytesSent || bytesSent;
+                bytesRecv = stat.bytesReceived || bytesRecv;
+                rttMs = (stat.currentRoundTripTime || 0) * 1000;
+            }
 
-                // Jitter (video inbound)
-                if (stat.type === "inbound-rtp" && stat.kind === "video") {
-                    jitterMs = (stat.jitter || 0) * 1000;
-                }
-            });
+            // ✅ Inbound video jitter
+            if (stat.type === "inbound-rtp" && stat.kind === "video") {
+                jitterMs = (stat.jitter || 0) * 1000;
+            }
         });
 
         const hostMbps =
@@ -97,8 +95,10 @@ function startNetworkMonitoring() {
 
         document.getElementById("p-jitter").innerText =
             jitterMs.toFixed(1) + " ms";
+
     }, 1000);
 }
+
 
 /* ================= RECORD TIMER ================= */
 function updateTimer() {
