@@ -117,17 +117,29 @@ function startNetworkMonitoring() {
         document.getElementById("h-packet-loss").innerText = packetLossPct + " %";
         document.getElementById("p-packet-loss").innerText = packetLossPct + " %";
 
-        // Relaxed realistic quality thresholds
-        let quality = "Good";
-        let qualityColor = "#00c853";
+        // ================= REALISTIC 5-TIER QUALITY CLASSIFICATION =================
+        let quality = "Excellent";
+        let qualityColor = "#4caf50";  // Rich green for Excellent
 
-        if (uploadMbps < 1 || downloadMbps < 0.5 || rtt > 150 || jitter > 50 || parseFloat(packetLossPct) > 3) {
-            quality = "Fair";
-            qualityColor = "#ffaa00";
+        if (uploadMbps >= 4 && downloadMbps >= 3 && rtt < 50 && jitter < 10 && parseFloat(packetLossPct) < 0.5) {
+            quality = "Excellent";
+            qualityColor = "#4caf50";
         }
-        if (uploadMbps < 0.5 || downloadMbps < 0.2 || rtt > 300 || jitter > 100 || parseFloat(packetLossPct) > 10) {
+        else if (uploadMbps >= 2 && downloadMbps >= 1 && rtt < 100 && jitter < 25 && parseFloat(packetLossPct) < 1) {
+            quality = "Good";
+            qualityColor = "#00c853";  // Bright green
+        }
+        else if (uploadMbps >= 1 && downloadMbps >= 0.5 && rtt < 200 && jitter < 40 && parseFloat(packetLossPct) < 3) {
+            quality = "Fair";
+            qualityColor = "#ffaa00";  // Orange
+        }
+        else if (uploadMbps >= 0.5 && downloadMbps >= 0.2 && rtt < 300 && jitter < 80 && parseFloat(packetLossPct) < 8) {
             quality = "Poor";
-            qualityColor = "#ff4444";
+            qualityColor = "#ff4444";  // Red
+        }
+        else {
+            quality = "Bad";
+            qualityColor = "#d32f2f";  // Dark red
         }
 
         document.getElementById("h-network-quality").innerText = quality;
