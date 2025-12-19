@@ -199,25 +199,31 @@ startBtn.onclick = async () => {
     const ctx = canvas.getContext("2d");
     const dest = audioCtx.createMediaStreamDestination();
 
-    // Local mic
+    // Local microphone
     const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (micPub?.audioTrack) {
-        audioCtx.createMediaStreamSource(new MediaStream([micPub.audioTrack.mediaStreamTrack])).connect(dest);
+        audioCtx.createMediaStreamSource(
+            new MediaStream([micPub.audioTrack.mediaStreamTrack])
+        ).connect(dest);
     }
 
-    // Current remote audio
-    room.remoteParticipants.forEach(participant => {
-        participant.audioTracks.forEach(pub => {
-            if (pub.audioTrack?.isSubscribed) {
-                audioCtx.createMediaStreamSource(new MediaStream([pub.audioTrack.mediaStreamTrack])).connect(dest);
+    // Current remote participants' audio
+    room.remoteParticipants.values().forEach(participant => {
+        participant.audioTracks.values().forEach(publication => {
+            if (publication.audioTrack?.isSubscribed) {
+                audioCtx.createMediaStreamSource(
+                    new MediaStream([publication.audioTrack.mediaStreamTrack])
+                ).connect(dest);
             }
         });
     });
 
-    // Future remote audio tracks (new participants or re-subscribes)
-    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+    // Future remote audio tracks (new joins or resubscribes)
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio && participant !== room.localParticipant) {
-            audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack])).connect(dest);
+            audioCtx.createMediaStreamSource(
+                new MediaStream([track.mediaStreamTrack])
+            ).connect(dest);
         }
     });
 
@@ -238,7 +244,6 @@ startBtn.onclick = async () => {
     let mimeType = "video/webm";
     if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) mimeType = "video/webm;codecs=vp9,opus";
     else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) mimeType = "video/webm;codecs=vp8,opus";
-    else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) mimeType = "video/webm;codecs=vp9";
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
