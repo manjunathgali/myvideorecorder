@@ -75,7 +75,7 @@
       font-weight: bold;
       font-size: 1rem;
       cursor: pointer;
-      min-width: 120px;
+      min-width: 140px;
     }
 
     button:active {
@@ -108,67 +108,23 @@
 <script src="participant.js"></script>
 
 <script>
-  // Make room accessible to HTML
-  window.room = null;
-
-  // Camera switch logic
-  let currentFacingMode = 'user'; // start with front camera
-
+  // Camera switch button
   document.getElementById('camera-switch-btn').onclick = async () => {
-    if (!window.room || !window.room.localParticipant) {
-      alert("Not connected yet");
+    if (!window.switchCamera) {
+      alert("Camera function not ready");
       return;
     }
 
-    const localParticipant = window.room.localParticipant;
-    const cameraPub = localParticipant.getTrackPublication(Track.Source.Camera);
+    const currentText = document.getElementById('camera-switch-btn').textContent;
+    const newMode = currentText.includes("Rear") ? 'environment' : 'user';
 
-    if (!cameraPub) {
-      alert("Camera not enabled");
-      return;
-    }
-
-    // Toggle between user (front) and environment (rear)
-    const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-
-    try {
-      // Stop current camera
-      await localParticipant.setCameraEnabled(false);
-
-      // Start new camera with desired facing mode
-      await localParticipant.setCameraEnabled(true, {
-        resolution: VideoPresets.h1440.resolution,
-        frameRate: 30,
-        facingMode: newFacingMode
-      });
-
-      // Re-attach to local video element
-      const newCamPub = localParticipant.getTrackPublication(Track.Source.Camera);
-      if (newCamPub?.videoTrack) {
-        newCamPub.videoTrack.attach(document.getElementById("local-video"));
-      }
-
-      // Update mirror style
-      const localVideo = document.getElementById("local-video");
-      if (newFacingMode === 'user') {
-        localVideo.classList.add('rear');
-      } else {
-        localVideo.classList.remove('rear');
-      }
-
-      // Update button text
-      document.getElementById('camera-switch-btn').textContent =
-              newFacingMode === 'user' ? "Switch to Rear Camera" : "Switch to Front Camera";
-
-      currentFacingMode = newFacingMode;
-      console.log("Camera switched to", newFacingMode);
-    } catch (err) {
-      console.error("Camera switch failed:", err);
-      alert("Failed to switch camera: " + err.message);
+    const success = await window.switchCamera(newMode);
+    if (!success) {
+      console.warn("Camera switch failed");
     }
   };
 
-  // Optional status update
+  // Status update
   window.updateStatus = (msg) => {
     document.getElementById('status').textContent = msg;
   };
