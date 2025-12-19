@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>LiveKit Host - Recording</title>
+  <title>LiveKit Participant</title>
   <style>
     body {
       font-family: Arial, Helvetica, sans-serif;
@@ -10,111 +10,28 @@
       color: #eee;
       margin: 0;
       padding: 20px;
+      text-align: center;
     }
     h2 { color: #0af; margin-bottom: 20px; }
-    .video-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-      justify-content: center;
-      background: #222;
-      padding: 20px;
-      border-radius: 8px;
-    }
-    .video-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .tile {
-      width: 400px;
-      max-width: 100%;
-      height: 300px;
+    video {
+      width: 90%;
+      max-width: 1280px;
+      height: auto;
       background: #000;
       border: 2px solid #444;
       border-radius: 6px;
       object-fit: cover;
-    }
-    .meter-label { margin-top: 5px; width: 100%; text-align: center; font-size: 12px; color: #ccc; }
-    progress { width: 80%; height: 10px; }
-    .controls { margin-top: 20px; text-align: center; }
-    button {
-      padding: 10px 25px;
-      margin: 0 10px;
-      border: none;
-      border-radius: 5px;
-      background: #0af;
-      color: #000;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    button:disabled { background: #555; cursor: not-allowed; }
-    button:hover:not(:disabled) { background: #0ff; }
-    #record-timer { color: #ff4444; font-weight: bold; font-family: monospace; margin-top: 15px; text-align: center; font-size: 18px; }
-    .stats-dashboard {
-      margin-top: 25px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      font-family: monospace;
-      background: #111;
-      padding: 15px;
-      border-radius: 8px;
-      color: #0f0;
-      font-size: 13px;
-    }
-    .stat-item { border-bottom: 1px solid #333; padding: 4px 0; display: flex; justify-content: space-between; }
-    .stat-item:last-child { border-bottom: none; }
-    .stat-value { color: #fff; font-weight: bold; }
-    .stats-dashboard strong { display: block; margin-bottom: 8px; color: #0af; }
-    @media (max-width: 900px) {
-      .video-grid { flex-direction: column; align-items: center; }
-      .tile { width: 90%; height: auto; }
+      margin-bottom: 15px;
     }
   </style>
 </head>
 <body>
-<h2>Host Room (Recording Enabled)</h2>
+<h2>Participant Room</h2>
 
-<div class="video-grid">
-  <div class="video-container">
-    <video id="local-video" class="tile" autoplay muted playsinline></video>
-    <div class="meter-label">My Mic: <progress id="local-meter" value="0" max="100"></progress></div>
-  </div>
-  <div class="video-container">
-    <video id="remote-video" class="tile" autoplay playsinline></video>
-    <div class="meter-label">Remote Mic: <progress id="remote-meter" value="0" max="100"></progress></div>
-  </div>
-</div>
-
-<div class="controls">
-  <button id="start-btn">Start Recording</button>
-  <button id="stop-btn" disabled>Stop & Download</button>
-</div>
-
-<div id="record-timer">00:00</div>
-
-<div class="stats-dashboard">
-  <div id="host-stats">
-    <strong>HOST (You)</strong>
-    <div class="stat-item">Bandwidth: <span id="h-bitrate" class="stat-value">0 Mbps</span></div>
-    <div class="stat-item">Latency: <span id="h-latency" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Packet Loss: <span id="h-packet-loss" class="stat-value">0 %</span></div>
-    <div class="stat-item">Quality: <span id="h-network-quality" class="stat-value">Good</span></div>
-  </div>
-  <div id="participant-stats">
-    <strong>PARTICIPANT</strong>
-    <div class="stat-item">Bandwidth: <span id="p-bitrate" class="stat-value">0 Mbps</span></div>
-    <div class="stat-item">Latency: <span id="p-latency" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Jitter: <span id="p-jitter" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Packet Loss: <span id="p-packet-loss" class="stat-value">0 %</span></div>
-    <div class="stat-item">Quality: <span id="p-network-quality" class="stat-value">Good</span></div>
-  </div>
-</div>
+<video id="local-video" autoplay muted playsinline></video>
+<video id="remote-video" autoplay playsinline></video>
 
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script src="app.js"></script>
+<script src="participant.js"></script>
 </body>
 </html>
