@@ -1,4 +1,4 @@
-const { Room, RoomEvent, Track, VideoPresets, TrackPublishDefaults } = LivekitClient;
+const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;  // Removed TrackPublishDefaults
 
 let room;
 
@@ -12,17 +12,16 @@ async function startParticipant() {
         const { token } = await response.json();
 
         room = new Room({
-            adaptiveStream: true,
-            dynacast: true,
-            // Prefer VP9 for better video quality (falls back if unsupported)
+            adaptiveStream: true,   // Adjusts received quality based on network & viewport
+            dynacast: true,         // Efficient bandwidth usage with simulcast
             publishDefaults: {
-                videoCodec: "vp9",  // Key improvement: higher quality codec
-                // Optional: custom simulcast layers (low and mid; high is auto from capture)
-                // videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h720],
-            } as TrackPublishDefaults,
+                videoCodec: "vp9",                  // Best quality + efficiency (SVC enabled)
+                backupCodec: { codec: "vp8" },      // Fallback for browsers that don't support VP9 (e.g. Safari)
+            },
+            // No "as TrackPublishDefaults" — that's TypeScript only!
         });
 
-        // --- Subscribe to Host tracks (unchanged, but adaptiveStream helps received quality) ---
+        // Subscribe to host's video and audio
         room.on(RoomEvent.TrackSubscribed, (track) => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
@@ -30,40 +29,49 @@ async function startParticipant() {
             if (track.kind === Track.Kind.Audio) {
                 const audio = document.createElement("audio");
                 audio.autoplay = true;
+                audio.playsInline = true;
                 track.attach(audio);
             }
         });
 
-        // --- Connect ---
+        // Connect to the room
         await room.connect(
             "wss://my-first-app-mwgdyws7.livekit.cloud",
             token
         );
 
-        // --- Enable camera & mic with highest quality preset ---
-        // Try h2160 (4K) first; fallback to h1440 or h1080 if device can't handle
-        await room.localParticipant.setCameraEnabled(
-            true,
-            {
-                resolution: VideoPresets.h2160.resolution,  // Or h1440 for 1440p
-                frameRate: 30
-            }
-        );
+        console.log("Connected to room as participant");
+
+        // Enable camera with high quality — h1440 is reliable and sharp on most devices
+        // (h2160 often fails or heavily downscales on laptops/phones)
+        await room.localParticipant.setCameraEnabled(true, {
+            resolution: VideoPresets.h1440.resolution,  // Great balance: sharp but achievable
+            frameRate: 30
+        });
 
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        // --- Show participant’s own camera ---
+        // Show your own camera preview
         const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (camPub?.videoTrack) {
             camPub.videoTrack.attach(document.getElementById("local-video"));
         }
 
-        console.log("Participant connected");
-        console.log("Camera enabled:", room.localParticipant.isCameraEnabled);
+        console.log("Participant camera and mic enabled");
+        console.log("Camera active:", room.localParticipant.isCameraEnabled);
+
+        // Optional: Update status on participant page if you have it
+        if (window.updateStatus) {
+            window.updateStatus("Connected ✓");
+        }
 
     } catch (err) {
         console.error("Participant error:", err);
-        alert(err.message);
+        alert("Connection failed: " + err.message);
+
+        if (window.updateStatus) {
+            window.updateStatus("Error: " + err.message);
+        }
     }
 }
 
