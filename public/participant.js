@@ -2,7 +2,6 @@ const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;
 
 let room;
 
-// Global for HTML access
 window.room = null;
 
 async function startParticipant() {
@@ -14,6 +13,12 @@ async function startParticipant() {
         room = new Room({
             adaptiveStream: true,
             dynacast: true,
+            expLowLatency: true,
+            audioCaptureDefaults: {
+                noiseSuppression: true,
+                echoCancellation: true,
+                autoGainControl: true
+            },
             publishDefaults: {
                 videoCodec: "vp9",
                 backupCodec: { codec: "vp8" },
@@ -23,7 +28,12 @@ async function startParticipant() {
                     VideoPresets.h1080,
                     VideoPresets.h1440
                 ],
-                bitrateLimit: 0
+                bitrateLimit: 0,
+                videoEncoding: {
+                    maxBitrate: 6000000,
+                    maxFramerate: 30,
+                    scalabilityMode: "L3T3"
+                }
             }
         });
 
@@ -43,13 +53,12 @@ async function startParticipant() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        // Start with front camera
-        await switchCamera('user');
+        await switchCamera('user');  // Start with front camera
 
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        if (window.updateStatus) window.updateStatus("Connected – Camera Ready");
-        console.log("Participant connected successfully");
+        if (window.updateStatus) window.updateStatus("Connected – Max Quality");
+        console.log("Participant connected");
     } catch (err) {
         console.error("Participant error:", err);
         alert("Connection failed: " + err.message);
@@ -57,10 +66,9 @@ async function startParticipant() {
     }
 }
 
-// Global function to switch camera
 window.switchCamera = async function(facingMode = 'user') {
     if (!room || !room.localParticipant) {
-        console.warn("Room not ready yet");
+        console.warn("Room not ready");
         return false;
     }
 
@@ -79,22 +87,18 @@ window.switchCamera = async function(facingMode = 'user') {
         const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
 
         if (cameraPub && cameraPub.track) {
-            // Correct method: replaceTrack
             await cameraPub.track.replaceTrack(newVideoTrack);
         } else {
-            // First time - publish new track
             await room.localParticipant.publishTrack(newVideoTrack, {
                 source: Track.Source.Camera
             });
         }
 
-        // Re-attach to preview
         const updatedPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (updatedPub?.videoTrack) {
             updatedPub.videoTrack.attach(document.getElementById("local-video"));
         }
 
-        // Mirror handling
         const localVideo = document.getElementById("local-video");
         if (facingMode === 'user') {
             localVideo.classList.remove('rear');
@@ -102,17 +106,15 @@ window.switchCamera = async function(facingMode = 'user') {
             localVideo.classList.add('rear');
         }
 
-        // Update button
         const btn = document.getElementById('camera-switch-btn');
         if (btn) {
             btn.textContent = facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera';
         }
 
-        console.log("Switched to", facingMode === 'user' ? 'front' : 'rear', "camera");
         return true;
     } catch (err) {
         console.error("Camera switch failed:", err);
-        alert("Failed to switch camera: " + err.message);
+        alert("Failed to switch camera");
         return false;
     }
 };

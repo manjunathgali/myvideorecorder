@@ -36,9 +36,7 @@ function createMeter(stream, meterId) {
     update();
 }
 
-/* ================= NETWORK STATS (UNCHANGED - KEEP AS IS) ================= */
-// ... (keep your current startNetworkMonitoring() function - it's now accurate with all traffic)
-
+/* ================= NETWORK STATS ================= */
 let lastBytesSent = 0;
 let lastBytesRecv = 0;
 let lastPacketsLost = 0;
@@ -116,38 +114,25 @@ function startNetworkMonitoring() {
         document.getElementById("h-packet-loss").innerText = packetLossPct + " %";
         document.getElementById("p-packet-loss").innerText = packetLossPct + " %";
 
-        // ================= REALISTIC QUALITY FOR WEBCAM CALLS =================
-        let quality = "Good";  // Default to Good for typical calls
+        // ================= TEAMS / WHATSAPP STYLE QUALITY =================
+        let qualityIcon = "🟢";
+        let qualityText = "Good";
         let qualityColor = "#00c853";
 
-        // Excellent: High motion, full-screen, max layers active
-        if (uploadMbps >= 4 && downloadMbps >= 2.5 && rtt < 50 && jitter < 15 && parseFloat(packetLossPct) < 0.5) {
-            quality = "Excellent";
-            qualityColor = "#4caf50";
-        }
-        // Good: Smooth HD — this is what most real calls look like
-        else if (uploadMbps >= 1.2 && downloadMbps >= 0.6 && rtt < 120 && jitter < 40 && parseFloat(packetLossPct) < 2) {
-            quality = "Good";
-            qualityColor = "#00c853";
-        }
-        // Fair: Reduced but still usable
-        else if (uploadMbps >= 0.3 && downloadMbps >= 0.3 && rtt < 200 && jitter < 60 && parseFloat(packetLossPct) < 5) {
-            quality = "Fair";
+        if (uploadMbps < 1.0 || downloadMbps < 0.5 || rtt > 100 || jitter > 40 || parseFloat(packetLossPct) > 2) {
+            qualityIcon = "⚠️";
+            qualityText = "Fair";
             qualityColor = "#ffaa00";
         }
-        // Poor: Noticeable issues
-        else if (uploadMbps >= 0.1 && downloadMbps >= 0.1 && rtt < 300 && jitter < 100 && parseFloat(packetLossPct) < 10) {
-            quality = "Poor";
+
+        if (uploadMbps < 0.5 || downloadMbps < 0.3 || rtt > 200 || jitter > 80 || parseFloat(packetLossPct) > 5) {
+            qualityIcon = "🔴";
+            qualityText = "Poor";
             qualityColor = "#ff4444";
         }
-        // Bad: Really broken
-        else {
-            quality = "Bad";
-            qualityColor = "#d32f2f";
-        }
 
-        document.getElementById("h-network-quality").innerText = quality;
-        document.getElementById("p-network-quality").innerText = quality;
+        document.getElementById("h-network-quality").innerHTML = `${qualityIcon} ${qualityText}`;
+        document.getElementById("p-network-quality").innerHTML = `${qualityIcon} ${qualityText}`;
         document.getElementById("h-network-quality").style.color = qualityColor;
         document.getElementById("p-network-quality").style.color = qualityColor;
     }, 1000);
@@ -161,7 +146,7 @@ function updateTimer() {
     document.getElementById("record-timer").innerText = `REC ${mins}:${secs}`;
 }
 
-/* ================= START HOST - MAX QUALITY SETTINGS ================= */
+/* ================= START HOST ================= */
 async function start() {
     try {
         const identity = "host-" + Math.floor(Math.random() * 1000);
@@ -171,7 +156,12 @@ async function start() {
         room = new Room({
             adaptiveStream: true,
             dynacast: true,
-            // MAX QUALITY SETTINGS
+            expLowLatency: true,
+            audioCaptureDefaults: {
+                noiseSuppression: true,
+                echoCancellation: true,
+                autoGainControl: true
+            },
             publishDefaults: {
                 videoCodec: "vp9",
                 backupCodec: { codec: "vp8" },
@@ -179,13 +169,14 @@ async function start() {
                     VideoPresets.h360,
                     VideoPresets.h720,
                     VideoPresets.h1080,
-                    VideoPresets.h1440  // Force high layers
+                    VideoPresets.h1440
                 ],
-                bitrateLimit: 0  // 0 = no limit (use as much as possible)
-            },
-            // Disable bandwidth estimation caps
-            rtcConfig: {
-                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                bitrateLimit: 0,
+                videoEncoding: {
+                    maxBitrate: 6000000,
+                    maxFramerate: 30,
+                    scalabilityMode: "L3T3"
+                }
             }
         });
 
@@ -200,10 +191,10 @@ async function start() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        // MAX RESOLUTION - Try 1440p, fallback to 1080p only if needed
         await room.localParticipant.setCameraEnabled(true, {
             resolution: VideoPresets.h1440.resolution,
-            frameRate: 30
+            frameRate: 30,
+            videoEncoding: { scalabilityMode: "L3T3" }
         });
         await room.localParticipant.setMicrophoneEnabled(true);
 
@@ -219,16 +210,16 @@ async function start() {
 
         startNetworkMonitoring();
 
-        if (window.updateStatus) window.updateStatus("Connected – Max Quality Mode");
-        console.log("Host connected with maximum quality settings");
+        if (window.updateStatus) window.updateStatus("Connected – Max Quality");
+        console.log("Host connected with premium settings");
     } catch (err) {
         console.error("Setup error:", err);
         alert("Setup Error: " + err.message);
-        if (window.updateStatus) window.updateStatus("Error: " + err.message);
+        if (window.updateStatus) window.updateStatus("Error");
     }
 }
 
-/* ================= RECORDING - HIGHER BITRATE ================= */
+/* ================= RECORDING ================= */
 const startBtn = document.getElementById("start-btn");
 const stopBtn = document.getElementById("stop-btn");
 
@@ -293,7 +284,7 @@ startBtn.onclick = async () => {
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 20_000_000  // 20 Mbps for ultra-high quality recording
+        videoBitsPerSecond: 20_000_000
     });
 
     recordedChunks = [];
