@@ -131,12 +131,12 @@ function startNetworkMonitoring() {
             qualityColor = "#00c853";
         }
         // Fair: Reduced but still usable
-        else if (uploadMbps >= 0.6 && downloadMbps >= 0.3 && rtt < 200 && jitter < 60 && parseFloat(packetLossPct) < 5) {
+        else if (uploadMbps >= 0.3 && downloadMbps >= 0.3 && rtt < 200 && jitter < 60 && parseFloat(packetLossPct) < 5) {
             quality = "Fair";
             qualityColor = "#ffaa00";
         }
         // Poor: Noticeable issues
-        else if (uploadMbps >= 0.3 && downloadMbps >= 0.1 && rtt < 300 && jitter < 100 && parseFloat(packetLossPct) < 10) {
+        else if (uploadMbps >= 0.1 && downloadMbps >= 0.1 && rtt < 300 && jitter < 100 && parseFloat(packetLossPct) < 10) {
             quality = "Poor";
             qualityColor = "#ff4444";
         }
