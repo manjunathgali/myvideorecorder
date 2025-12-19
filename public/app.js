@@ -7,18 +7,22 @@ let audioCtx;
 let timerInterval;
 let secondsElapsed = 0;
 
-// --- AUDIO CONTEXT ---
+/* ================= AUDIO CONTEXT ================= */
 function ensureAudioContext() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 }
 
-// --- AUDIO METER ---
+/* ================= AUDIO METER ================= */
 function createMeter(stream, meterId) {
     ensureAudioContext();
+
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
+
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const meter = document.getElementById(meterId);
 
@@ -32,20 +36,10 @@ function createMeter(stream, meterId) {
     update();
 }
 
-// --- NETWORK MONITORING ---
+/* ================= NETWORK STATS ================= */
 let lastBytesSent = 0;
 let lastBytesRecv = 0;
 let lastTs = performance.now();
-
-function classifyQuality({ bandwidth, latency, jitter, packetLoss }) {
-    if (packetLoss > 2 || latency > 200 || jitter > 30 || bandwidth < 0.3) {
-        return { label: "Poor", color: "#ff4444" };
-    }
-    if (packetLoss > 1 || latency > 100 || jitter > 20 || bandwidth < 1) {
-        return { label: "Warning", color: "#ffaa00" };
-    }
-    return { label: "Good", color: "#00c853" };
-}
 
 function startNetworkMonitoring() {
     setInterval(async () => {
@@ -53,73 +47,47 @@ function startNetworkMonitoring() {
 
         const now = performance.now();
         const deltaSec = (now - lastTs) / 1000;
-        if (deltaSec < 0.5) return;
+        if (deltaSec < 0.5) return; // Avoid too frequent updates
         lastTs = now;
 
-        let sent = 0, recv = 0, rttMs = 0, jitterMs = 0;
-        let packetsLost = 0, packetsSent = 0, packetsRecv = 0;
+        let bytesSent = 0;
+        let bytesRecv = 0;
+        let rttMs = 0;
+        let jitterMs = 0;
 
-        const pubPC = room.engine.pcManager.publisher?.pc;
-        if (pubPC) {
-            const stats = await pubPC.getStats();
-            stats.forEach(stat => {
-                if (stat.type === "candidate-pair" && stat.nominated) {
-                    sent += stat.bytesSent || 0;
+        try {
+            const statsMap = await room.engine.pcManager.getStats();
+            if (!statsMap) return;
+
+            statsMap.forEach(stat => {
+                if (stat.type === "candidate-pair" && stat.nominated && stat.state === "succeeded") {
+                    bytesSent = Math.max(bytesSent, stat.bytesSent || 0);
+                    bytesRecv = Math.max(bytesRecv, stat.bytesReceived || 0);
                     rttMs = (stat.currentRoundTripTime || 0) * 1000;
-                }
-                if (stat.type === "outbound-rtp" && stat.kind === "video") {
-                    packetsSent += stat.packetsSent || 0;
-                    packetsLost += stat.packetsLost || 0;
-                }
-            });
-        }
-
-        const subPC = room.engine.pcManager.subscriber?.pc;
-        if (subPC) {
-            const stats = await subPC.getStats();
-            stats.forEach(stat => {
-                if (stat.type === "candidate-pair" && stat.nominated) {
-                    recv += stat.bytesReceived || 0;
                 }
                 if (stat.type === "inbound-rtp" && stat.kind === "video") {
                     jitterMs = (stat.jitter || 0) * 1000;
-                    packetsRecv += stat.packetsReceived || 0;
-                    packetsLost += stat.packetsLost || 0;
                 }
             });
+        } catch (e) {
+            console.warn("Stats error:", e);
         }
 
-        const uploadMbps = ((sent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
-        const downloadMbps = ((recv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
-        lastBytesSent = sent;
-        lastBytesRecv = recv;
+        const uploadMbps = ((bytesSent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
+        const downloadMbps = ((bytesRecv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
 
-        const totalPackets = packetsSent + packetsRecv;
-        const packetLossPct = totalPackets > 0 ? (packetsLost / totalPackets) * 100 : 0;
+        lastBytesSent = bytesSent;
+        lastBytesRecv = bytesRecv;
 
-        const quality = classifyQuality({
-            bandwidth: Math.max(uploadMbps, downloadMbps),
-            latency: rttMs,
-            jitter: jitterMs,
-            packetLoss: packetLossPct
-        });
-
-        document.getElementById("h-bitrate").innerText = uploadMbps.toFixed(2) + " Mbps ↑";
-        document.getElementById("p-bitrate").innerText = downloadMbps.toFixed(2) + " Mbps ↓";
+        document.getElementById("h-bitrate").innerText = Math.max(uploadMbps, 0).toFixed(2) + " Mbps ↑";
+        document.getElementById("p-bitrate").innerText = Math.max(downloadMbps, 0).toFixed(2) + " Mbps ↓";
         document.getElementById("h-latency").innerText = rttMs.toFixed(0) + " ms";
         document.getElementById("p-latency").innerText = rttMs.toFixed(0) + " ms";
-        document.getElementById("h-jitter").innerText = jitterMs.toFixed(1) + " ms";
         document.getElementById("p-jitter").innerText = jitterMs.toFixed(1) + " ms";
-        document.getElementById("h-packet-loss").innerText = packetLossPct.toFixed(2) + " %";
-        document.getElementById("p-packet-loss").innerText = packetLossPct.toFixed(2) + " %";
-        document.getElementById("h-network-quality").innerText = quality.label;
-        document.getElementById("h-network-quality").style.color = quality.color;
-        document.getElementById("p-network-quality").innerText = quality.label;
-        document.getElementById("p-network-quality").style.color = quality.color;
     }, 1000);
 }
 
-// --- RECORD TIMER ---
+/* ================= RECORD TIMER ================= */
 function updateTimer() {
     secondsElapsed++;
     const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, "0");
@@ -127,7 +95,7 @@ function updateTimer() {
     document.getElementById("record-timer").innerText = `REC ${mins}:${secs}`;
 }
 
-// --- START HOST ---
+/* ================= START HOST ================= */
 async function start() {
     try {
         const identity = "host-" + Math.floor(Math.random() * 1000);
@@ -138,12 +106,12 @@ async function start() {
             adaptiveStream: true,
             dynacast: true,
             publishDefaults: {
-                videoCodec: "vp9",
-                backupCodec: { codec: "vp8" },
-            },
+                videoCodec: "vp9",           // Better quality & efficiency
+                backupCodec: { codec: "vp8" } // Safari fallback
+            }
         });
 
-        // Main subscription for video display + remote meter
+        // Display remote video + audio meter
         room.on(RoomEvent.TrackSubscribed, track => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
@@ -155,17 +123,20 @@ async function start() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
+        // High quality camera (h1440 if supported, falls back gracefully)
         await room.localParticipant.setCameraEnabled(true, {
             resolution: VideoPresets.h1440.resolution,
             frameRate: 30
         });
         await room.localParticipant.setMicrophoneEnabled(true);
 
+        // Attach local video
         const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (camPub?.videoTrack) {
             camPub.videoTrack.attach(document.getElementById("local-video"));
         }
 
+        // Local mic meter
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         if (micPub?.audioTrack) {
             createMeter(new MediaStream([micPub.audioTrack.mediaStreamTrack]), "local-meter");
@@ -174,7 +145,7 @@ async function start() {
         startNetworkMonitoring();
 
         if (window.updateStatus) window.updateStatus("Connected ✓");
-        console.log("Host connected successfully");
+        console.log("Host connected – high-quality VP9 enabled");
     } catch (err) {
         console.error("Setup error:", err);
         alert("Setup Error: " + err.message);
@@ -182,7 +153,7 @@ async function start() {
     }
 }
 
-// --- RECORDING ---
+/* ================= RECORDING ================= */
 const startBtn = document.getElementById("start-btn");
 const stopBtn = document.getElementById("stop-btn");
 
@@ -193,13 +164,15 @@ startBtn.onclick = async () => {
     const localVid = document.getElementById("local-video");
     const remoteVid = document.getElementById("remote-video");
 
+    // Higher resolution composite (1440p side-by-side)
     const canvas = document.createElement("canvas");
     canvas.width = 2560;
     canvas.height = 1440;
     const ctx = canvas.getContext("2d");
+
     const dest = audioCtx.createMediaStreamDestination();
 
-    // Local microphone
+    // Host microphone
     const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (micPub?.audioTrack) {
         audioCtx.createMediaStreamSource(
@@ -207,25 +180,26 @@ startBtn.onclick = async () => {
         ).connect(dest);
     }
 
-    // Current remote participants' audio (safe Array.from for older versions)
-    Array.from(room.remoteParticipants.values()).forEach(participant => {
-        Array.from(participant.audioTracks.values()).forEach(publication => {
-            if (publication.audioTrack?.isSubscribed) {
+    // Current remote participants' audio — using your working pattern
+    room.remoteParticipants.forEach(participant => {
+        participant.getTrackPublications().forEach(pub => {
+            if (pub.kind === Track.Kind.Audio && pub.audioTrack?.isSubscribed) {
                 audioCtx.createMediaStreamSource(
-                    new MediaStream([publication.audioTrack.mediaStreamTrack])
+                    new MediaStream([pub.audioTrack.mediaStreamTrack])
                 ).connect(dest);
             }
         });
     });
 
-    // Future remote audio tracks
-    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+    // Future audio tracks (e.g., late joiners during recording)
+    const audioListener = (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio && participant !== room.localParticipant) {
             audioCtx.createMediaStreamSource(
                 new MediaStream([track.mediaStreamTrack])
             ).connect(dest);
         }
-    });
+    };
+    room.on(RoomEvent.TrackSubscribed, audioListener);
 
     function draw() {
         if (mediaRecorder?.state !== "recording") return;
@@ -241,19 +215,25 @@ startBtn.onclick = async () => {
         ...dest.stream.getAudioTracks()
     ]);
 
+    // Prefer VP9 for recording
     let mimeType = "video/webm";
-    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) mimeType = "video/webm;codecs=vp9,opus";
-    else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) mimeType = "video/webm;codecs=vp8,opus";
+    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
+        mimeType = "video/webm;codecs=vp9,opus";
+    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
+        mimeType = "video/webm;codecs=vp8";
+    }
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 12_000_000
+        videoBitsPerSecond: 12_000_000  // Higher quality recording
     });
 
     recordedChunks = [];
     mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
 
     mediaRecorder.onstop = () => {
+        room.off(RoomEvent.TrackSubscribed, audioListener); // Clean up listener
+
         clearInterval(timerInterval);
         secondsElapsed = 0;
         document.getElementById("record-timer").innerText = "00:00";
@@ -282,5 +262,5 @@ stopBtn.onclick = () => {
     if (mediaRecorder) mediaRecorder.stop();
 };
 
-// --- BOOT ---
+/* ================= BOOT ================= */
 start();
