@@ -2,153 +2,230 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>LiveKit Host - Recording</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LiveKit Host • Recording Room</title>
+  <meta name="description" content="LiveKit host with client-side recording and network monitoring">
+
   <style>
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a1a;
+      --text: #eee;
+      --accent: #00aaff;
+      --accent-hover: #00ccff;
+      --green: #00c853;
+      --warning: #ffaa00;
+      --error: #ff4444;
+      --border: #333;
+    }
+
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      background: #111;
-      color: #eee;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       margin: 0;
       padding: 20px;
+      min-height: 100vh;
+      box-sizing: border-box;
     }
 
     h2 {
-      color: #0af;
-      margin-bottom: 20px;
+      text-align: center;
+      color: var(--accent);
+      margin: 0 0 30px;
+      font-size: 2rem;
     }
 
     .video-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-      justify-content: center;
-      background: #222;
-      padding: 20px;
-      border-radius: 8px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      gap: 30px;
+      max-width: 1800px;
+      margin: 0 auto 30px;
     }
 
     .video-container {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
 
     .tile {
-      width: 400px;
+      width: 100%;
       max-width: 100%;
-      height: 300px;
+      height: 60vh;
+      max-height: 800px;
       background: #000;
-      border: 2px solid #444;
-      border-radius: 6px;
-      object-fit: cover;
+      border: 4px solid var(--border);
+      border-radius: 16px;
+      object-fit: contain;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+    }
+
+    .label {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 1rem;
+      z-index: 10;
+      pointer-events: none;
     }
 
     .meter-label {
-      margin-top: 5px;
-      width: 100%;
+      margin-top: 12px;
+      width: 80%;
       text-align: center;
-      font-size: 12px;
+      font-size: 0.95rem;
       color: #ccc;
     }
 
     progress {
       width: 80%;
-      height: 10px;
+      height: 12px;
+      border-radius: 6px;
     }
 
+    progress::-webkit-progress-value { background: var(--accent); }
+    progress::-moz-progress-bar { background: var(--accent); }
+
     .controls {
-      margin-top: 20px;
       text-align: center;
+      margin: 30px 0;
     }
 
     button {
-      padding: 10px 25px;
-      margin: 0 10px;
+      padding: 14px 32px;
+      margin: 0 12px;
       border: none;
-      border-radius: 5px;
-      background: #0af;
+      border-radius: 12px;
+      background: var(--accent);
       color: #000;
       font-weight: bold;
+      font-size: 1.1rem;
       cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    button:disabled {
-      background: #555;
-      cursor: not-allowed;
+      transition: all 0.3s;
     }
 
     button:hover:not(:disabled) {
-      background: #0ff;
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+    }
+
+    button:disabled {
+      background: #444;
+      cursor: not-allowed;
+      transform: none;
     }
 
     #record-timer {
-      color: #ff4444;
-      font-weight: bold;
+      font-size: 2rem;
       font-family: monospace;
-      margin-top: 15px;
+      font-weight: bold;
+      color: var(--error);
       text-align: center;
-      font-size: 18px;
+      margin: 20px 0;
+      min-height: 48px;
+    }
+
+    .extra-controls {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
     }
 
     .stats-dashboard {
-      margin-top: 25px;
+      max-width: 1000px;
+      margin: 30px auto;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
-      font-family: monospace;
-      background: #111;
-      padding: 15px;
-      border-radius: 8px;
-      color: #0f0;
-      font-size: 13px;
+      background: var(--surface);
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .stats-panel {
+      background: #000;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .stats-panel strong {
+      display: block;
+      color: var(--accent);
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+      text-align: center;
     }
 
     .stat-item {
-      border-bottom: 1px solid #333;
-      padding: 4px 0;
       display: flex;
       justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #222;
+      font-family: monospace;
     }
 
-    .stat-item:last-child {
-      border-bottom: none;
-    }
+    .stat-item:last-child { border: none; }
 
     .stat-value {
-      color: #fff;
       font-weight: bold;
+      color: #fff;
     }
 
-    .stats-dashboard strong {
-      display: block;
-      margin-bottom: 8px;
-      color: #0af;
+    .status {
+      text-align: center;
+      font-size: 1.1rem;
+      color: #aaa;
+      margin: 20px 0;
     }
 
-    @media (max-width: 900px) {
-      .video-grid {
-        flex-direction: column;
-        align-items: center;
-      }
-      .tile {
-        width: 90%;
-        height: auto;
-      }
+    /* Responsive */
+    @media (max-width: 1000px) {
+      .video-grid { grid-template-columns: 1fr; }
+      .tile { height: 50vh; }
+      .stats-dashboard { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      h2 { font-size: 1.6rem; }
+      button { padding: 12px 24px; font-size: 1rem; }
+      #record-timer { font-size: 1.6rem; }
     }
   </style>
 </head>
 <body>
-<h2>Host Room (Recording Enabled)</h2>
+<h2>Host Room • Recording Enabled</h2>
+
+<div class="status" id="status">Initializing...</div>
+
+<div class="extra-controls">
+  <button id="fullscreen-btn">Full Screen</button>
+  <button id="pip-btn">PiP Remote Video</button>
+</div>
 
 <div class="video-grid">
   <div class="video-container">
+    <div class="label">You (Host)</div>
     <video id="local-video" class="tile" autoplay muted playsinline></video>
-    <div class="meter-label">My Mic: <progress id="local-meter" value="0" max="100"></progress></div>
+    <div class="meter-label">Your Mic: <progress id="local-meter" value="0" max="100"></progress></div>
   </div>
+
   <div class="video-container">
+    <div class="label">Participant</div>
     <video id="remote-video" class="tile" autoplay playsinline></video>
-    <div class="meter-label">Remote Mic: <progress id="remote-meter" value="0" max="100"></progress></div>
+    <div class="meter-label">Participant Mic: <progress id="remote-meter" value="0" max="100"></progress></div>
   </div>
 </div>
 
@@ -160,25 +237,61 @@
 <div id="record-timer">00:00</div>
 
 <div class="stats-dashboard">
-  <div id="host-stats">
-    <strong>HOST (You)</strong>
-    <div class="stat-item">Bandwidth: <span id="h-bitrate" class="stat-value">0 Mbps</span></div>
+  <div class="stats-panel" id="host-stats">
+    <strong>HOST ↑ (Upload)</strong>
+    <div class="stat-item">Bandwidth: <span id="h-bitrate" class="stat-value">0.00 Mbps</span></div>
     <div class="stat-item">Latency: <span id="h-latency" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Packet Loss: <span id="h-packet-loss" class="stat-value">0 %</span></div>
+    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">0.0 ms</span></div>
+    <div class="stat-item">Packet Loss: <span id="h-packet-loss" class="stat-value">0.00 %</span></div>
     <div class="stat-item">Quality: <span id="h-network-quality" class="stat-value">Good</span></div>
   </div>
-  <div id="participant-stats">
-    <strong>PARTICIPANT</strong>
-    <div class="stat-item">Bandwidth: <span id="p-bitrate" class="stat-value">0 Mbps</span></div>
+
+  <div class="stats-panel" id="participant-stats">
+    <strong>PARTICIPANT ↓ (Download)</strong>
+    <div class="stat-item">Bandwidth: <span id="p-bitrate" class="stat-value">0.00 Mbps</span></div>
     <div class="stat-item">Latency: <span id="p-latency" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Jitter: <span id="p-jitter" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Packet Loss: <span id="p-packet-loss" class="stat-value">0 %</span></div>
+    <div class="stat-item">Jitter: <span id="p-jitter" class="stat-value">0.0 ms</span></div>
+    <div class="stat-item">Packet Loss: <span id="p-packet-loss" class="stat-value">0.00 %</span></div>
     <div class="stat-item">Quality: <span id="p-network-quality" class="stat-value">Good</span></div>
   </div>
 </div>
 
+<!-- LiveKit SDK -->
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script src="app.js"></script>
+
+<script>
+  // Fullscreen
+  document.getElementById('fullscreen-btn').onclick = () => {
+    const grid = document.querySelector('.video-grid');
+    if (grid.requestFullscreen) grid.requestFullscreen();
+    else if (grid.webkitRequestFullscreen) grid.webkitRequestFullscreen();
+    else if (grid.msRequestFullscreen) grid.msRequestFullscreen();
+  };
+
+  // Picture-in-Picture (remote participant)
+  document.getElementById('pip-btn').onclick = async () => {
+    const video = document.getElementById('remote-video');
+    if (!video || !document.pictureInPictureEnabled) return alert("PiP not supported");
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.warn("PiP failed:", err);
+    }
+  };
+
+  // Optional: Let app.js update status
+  window.updateStatus = (msg) => {
+    document.getElementById('status').textContent = msg;
+  };
+
+  // Initial status
+  window.updateStatus?.("Connecting to room...");
+</script>
 </body>
 </html>

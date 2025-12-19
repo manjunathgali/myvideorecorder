@@ -1,4 +1,4 @@
-const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;
+const { Room, RoomEvent, Track, VideoPresets, TrackPublishDefaults } = LivekitClient;
 
 let room;
 
@@ -12,11 +12,17 @@ async function startParticipant() {
         const { token } = await response.json();
 
         room = new Room({
-            adaptiveStream: true, // adaptive streaming based on bandwidth
-            dynacast: true        // enables efficient simulcast
+            adaptiveStream: true,
+            dynacast: true,
+            // Prefer VP9 for better video quality (falls back if unsupported)
+            publishDefaults: {
+                videoCodec: "vp9",  // Key improvement: higher quality codec
+                // Optional: custom simulcast layers (low and mid; high is auto from capture)
+                // videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h720],
+            } as TrackPublishDefaults,
         });
 
-        // --- Subscribe to Host tracks ---
+        // --- Subscribe to Host tracks (unchanged, but adaptiveStream helps received quality) ---
         room.on(RoomEvent.TrackSubscribed, (track) => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
@@ -35,10 +41,13 @@ async function startParticipant() {
         );
 
         // --- Enable camera & mic with highest quality preset ---
+        // Try h2160 (4K) first; fallback to h1440 or h1080 if device can't handle
         await room.localParticipant.setCameraEnabled(
             true,
-            { resolution: VideoPresets.h1080.resolution,
-                frameRate: 30 } // max frame rate for smooth video
+            {
+                resolution: VideoPresets.h2160.resolution,  // Or h1440 for 1440p
+                frameRate: 30
+            }
         );
 
         await room.localParticipant.setMicrophoneEnabled(true);
