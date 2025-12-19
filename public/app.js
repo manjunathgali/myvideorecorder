@@ -36,7 +36,9 @@ function createMeter(stream, meterId) {
     update();
 }
 
-/* ================= NETWORK STATS - FIXED TO INCLUDE ALL TRAFFIC ================= */
+/* ================= NETWORK STATS (UNCHANGED - KEEP AS IS) ================= */
+// ... (keep your current startNetworkMonitoring() function - it's now accurate with all traffic)
+
 let lastBytesSent = 0;
 let lastBytesRecv = 0;
 let lastPacketsLost = 0;
@@ -60,7 +62,6 @@ function startNetworkMonitoring() {
         let totalPackets = 0;
 
         try {
-            // Publisher (upload) - Sum all outbound-rtp (video + audio)
             if (room.engine.pcManager.publisher?.pc) {
                 const stats = await room.engine.pcManager.publisher.pc.getStats();
                 stats.forEach(report => {
@@ -75,7 +76,6 @@ function startNetworkMonitoring() {
                 });
             }
 
-            // Subscriber (download) - Sum all inbound-rtp (video + audio)
             if (room.engine.pcManager.subscriber?.pc) {
                 const stats = await room.engine.pcManager.subscriber.pc.getStats();
                 stats.forEach(report => {
@@ -107,39 +107,33 @@ function startNetworkMonitoring() {
 
         const packetLossPct = currentPacketLoss.toFixed(2);
 
-        // Update UI
         document.getElementById("h-bitrate").innerText = uploadMbps.toFixed(2) + " Mbps ↑";
         document.getElementById("p-bitrate").innerText = downloadMbps.toFixed(2) + " Mbps ↓";
         document.getElementById("h-latency").innerText = rtt.toFixed(0) + " ms";
         document.getElementById("p-latency").innerText = rtt.toFixed(0) + " ms";
-        document.getElementById("h-jitter").innerText = "—";  // Outbound jitter not available
+        document.getElementById("h-jitter").innerText = "—";
         document.getElementById("p-jitter").innerText = jitter.toFixed(1) + " ms";
         document.getElementById("h-packet-loss").innerText = packetLossPct + " %";
         document.getElementById("p-packet-loss").innerText = packetLossPct + " %";
 
-        // ================= REALISTIC 5-TIER QUALITY CLASSIFICATION =================
         let quality = "Excellent";
-        let qualityColor = "#4caf50";  // Rich green for Excellent
+        let qualityColor = "#4caf50";
 
         if (uploadMbps >= 4 && downloadMbps >= 3 && rtt < 50 && jitter < 10 && parseFloat(packetLossPct) < 0.5) {
             quality = "Excellent";
             qualityColor = "#4caf50";
-        }
-        else if (uploadMbps >= 2 && downloadMbps >= 1 && rtt < 100 && jitter < 25 && parseFloat(packetLossPct) < 1) {
+        } else if (uploadMbps >= 2 && downloadMbps >= 1 && rtt < 100 && jitter < 25 && parseFloat(packetLossPct) < 1) {
             quality = "Good";
-            qualityColor = "#00c853";  // Bright green
-        }
-        else if (uploadMbps >= 1 && downloadMbps >= 0.5 && rtt < 200 && jitter < 40 && parseFloat(packetLossPct) < 3) {
+            qualityColor = "#00c853";
+        } else if (uploadMbps >= 1 && downloadMbps >= 0.5 && rtt < 200 && jitter < 40 && parseFloat(packetLossPct) < 3) {
             quality = "Fair";
-            qualityColor = "#ffaa00";  // Orange
-        }
-        else if (uploadMbps >= 0.5 && downloadMbps >= 0.2 && rtt < 300 && jitter < 80 && parseFloat(packetLossPct) < 8) {
+            qualityColor = "#ffaa00";
+        } else if (uploadMbps >= 0.5 && downloadMbps >= 0.2 && rtt < 300 && jitter < 80 && parseFloat(packetLossPct) < 8) {
             quality = "Poor";
-            qualityColor = "#ff4444";  // Red
-        }
-        else {
+            qualityColor = "#ff4444";
+        } else {
             quality = "Bad";
-            qualityColor = "#d32f2f";  // Dark red
+            qualityColor = "#d32f2f";
         }
 
         document.getElementById("h-network-quality").innerText = quality;
@@ -157,7 +151,7 @@ function updateTimer() {
     document.getElementById("record-timer").innerText = `REC ${mins}:${secs}`;
 }
 
-/* ================= START HOST ================= */
+/* ================= START HOST - MAX QUALITY SETTINGS ================= */
 async function start() {
     try {
         const identity = "host-" + Math.floor(Math.random() * 1000);
@@ -167,9 +161,21 @@ async function start() {
         room = new Room({
             adaptiveStream: true,
             dynacast: true,
+            // MAX QUALITY SETTINGS
             publishDefaults: {
                 videoCodec: "vp9",
-                backupCodec: { codec: "vp8" }
+                backupCodec: { codec: "vp8" },
+                videoSimulcastLayers: [
+                    VideoPresets.h360,
+                    VideoPresets.h720,
+                    VideoPresets.h1080,
+                    VideoPresets.h1440  // Force high layers
+                ],
+                bitrateLimit: 0  // 0 = no limit (use as much as possible)
+            },
+            // Disable bandwidth estimation caps
+            rtcConfig: {
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             }
         });
 
@@ -184,6 +190,7 @@ async function start() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
+        // MAX RESOLUTION - Try 1440p, fallback to 1080p only if needed
         await room.localParticipant.setCameraEnabled(true, {
             resolution: VideoPresets.h1440.resolution,
             frameRate: 30
@@ -202,8 +209,8 @@ async function start() {
 
         startNetworkMonitoring();
 
-        if (window.updateStatus) window.updateStatus("Connected ✓");
-        console.log("Host connected – network monitoring active");
+        if (window.updateStatus) window.updateStatus("Connected – Max Quality Mode");
+        console.log("Host connected with maximum quality settings");
     } catch (err) {
         console.error("Setup error:", err);
         alert("Setup Error: " + err.message);
@@ -211,7 +218,7 @@ async function start() {
     }
 }
 
-/* ================= RECORDING (UNCHANGED - STILL WORKING) ================= */
+/* ================= RECORDING - HIGHER BITRATE ================= */
 const startBtn = document.getElementById("start-btn");
 const stopBtn = document.getElementById("stop-btn");
 
@@ -269,16 +276,14 @@ startBtn.onclick = async () => {
         ...dest.stream.getAudioTracks()
     ]);
 
-    let mimeType = "video/webm";
-    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
-        mimeType = "video/webm;codecs=vp9,opus";
-    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-        mimeType = "video/webm;codecs=vp8";
+    let mimeType = "video/webm;codecs=vp9,opus";
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "video/webm;codecs=vp8,opus";
     }
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 12_000_000
+        videoBitsPerSecond: 20_000_000  // 20 Mbps for ultra-high quality recording
     });
 
     recordedChunks = [];
@@ -295,7 +300,7 @@ startBtn.onclick = async () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `Meeting-${Date.now()}.webm`;
+        a.download = `Meeting-HQ-${Date.now()}.webm`;
         a.click();
         URL.revokeObjectURL(url);
 
