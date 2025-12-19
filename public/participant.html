@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LiveKit Participant • My Room</title>
-  <meta name="description" content="LiveKit video participant view">
+  <title>LiveKit Participant • Mobile</title>
 
   <style>
     :root {
@@ -19,159 +18,141 @@
       background: var(--bg);
       color: var(--text);
       margin: 0;
-      padding: 20px;
+      padding: 10px;
       min-height: 100vh;
-      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
     }
 
     h2 {
+      text-align: center;
       color: var(--accent);
-      margin: 0 0 30px;
-      font-size: 1.8rem;
+      margin: 10px 0;
+      font-size: 1.6rem;
     }
 
-    .container {
-      max-width: 1600px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      align-items: start;
+    .video-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
     }
 
     video {
       width: 100%;
       height: auto;
-      max-height: 80vh;
+      max-height: 70vh;
       background: #000;
       border: 3px solid var(--border);
       border-radius: 12px;
-      object-fit: contain; /* Preserves aspect ratio, shows full picture */
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      object-fit: contain;
     }
 
-    .video-wrapper {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .label {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(0, 0, 0, 0.6);
-      color: white;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      pointer-events: none;
-      z-index: 10;
+    #local-video {
+      transform: scaleX(-1); /* Mirror selfie camera */
     }
 
     .controls {
-      margin-top: 30px;
       display: flex;
-      gap: 12px;
       justify-content: center;
-      flex-wrap: wrap;
+      gap: 15px;
+      padding: 15px 0;
+      background: #222;
+      border-radius: 12px;
     }
 
     button {
       background: var(--accent);
-      color: white;
+      color: #000;
       border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
+      padding: 12px 20px;
+      border-radius: 50px;
+      font-weight: bold;
       font-size: 1rem;
       cursor: pointer;
-      transition: background 0.2s;
+      min-width: 120px;
     }
 
-    button:hover { background: #0088cc; }
-    button:disabled { background: #555; cursor: not-allowed; }
+    button:active {
+      background: #0088cc;
+    }
 
     .status {
-      margin-top: 20px;
+      text-align: center;
+      padding: 10px;
       font-size: 0.9rem;
       color: #aaa;
-    }
-
-    /* Mobile: stack videos */
-    @media (max-width: 900px) {
-      .container {
-        grid-template-columns: 1fr;
-      }
-      video { max-height: 60vh; }
-    }
-
-    @media (max-width: 600px) {
-      body { padding: 10px; }
-      h2 { font-size: 1.5rem; }
     }
   </style>
 </head>
 <body>
-<h2>Participant Room</h2>
-
-<div class="container">
-  <!-- Local Video (Participant's own camera) -->
-  <div class="video-wrapper">
-    <div class="label">You</div>
-    <video id="local-video" autoplay muted playsinline></video>
-  </div>
-
-  <!-- Remote Video (Host) -->
-  <div class="video-wrapper">
-    <div class="label">Host</div>
-    <video id="remote-video" autoplay playsinline></video>
-  </div>
-</div>
-
-<div class="controls">
-  <button id="fullscreen-btn">Full Screen</button>
-  <button id="pip-btn">Picture in Picture</button>
-</div>
+<h2>Participant View</h2>
 
 <div class="status" id="status">Connecting...</div>
 
-<!-- LiveKit Client SDK -->
+<div class="video-container">
+  <video id="remote-video" autoplay playsinline></video>
+  <video id="local-video" autoplay muted playsinline></video>
+</div>
+
+<div class="controls">
+  <button id="camera-switch-btn">Switch Camera</button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script src="participant.js"></script>
 
 <script>
-  // Fullscreen button
-  document.getElementById('fullscreen-btn').onclick = () => {
-    const container = document.querySelector('.container');
-    if (container.requestFullscreen) {
-      container.requestFullscreen();
-    } else if (container.webkitRequestFullscreen) {
-      container.webkitRequestFullscreen();
-    } else if (container.msRequestFullscreen) {
-      container.msRequestFullscreen();
-    }
-  };
-
-  // Picture-in-Picture (for remote video)
-  document.getElementById('pip-btn').onclick = async () => {
-    const video = document.getElementById('remote-video');
-    if (video && document.pictureInPictureEnabled && !video.disablePictureInPicture) {
-      try {
-        if (document.pictureInPictureElement) {
-          await document.exitPictureInPicture();
-        } else {
-          await video.requestPictureInPicture();
-        }
-      } catch (err) {
-        alert("PiP not supported or video not ready");
-      }
-    }
-  };
-
-  // Optional: Update status when connected
-  // You can enhance participant.js to call: window.updateStatus("Connected")
+  // Optional status update from participant.js
   window.updateStatus = (msg) => {
     document.getElementById('status').textContent = msg;
+  };
+  window.updateStatus("Loading...");
+
+  // Camera Switch Button
+  document.getElementById('camera-switch-btn').onclick = async () => {
+    if (!window.room || !window.room.localParticipant) {
+      alert("Not connected yet");
+      return;
+    }
+
+    const localParticipant = window.room.localParticipant;
+    const cameraPub = localParticipant.getTrackPublication(Track.Source.Camera);
+
+    if (!cameraPub) {
+      alert("Camera not enabled");
+      return;
+    }
+
+    // Toggle facing mode
+    const currentConstraints = cameraPub.videoTrack?.mediaStreamTrack.getConstraints();
+    const currentFacing = currentConstraints?.facingMode || 'user';
+    const newFacing = currentFacing === 'user' ? 'environment' : 'user';
+
+    try {
+      await localParticipant.setCameraEnabled(false);
+      await localParticipant.setCameraEnabled(true, {
+        resolution: VideoPresets.h1440.resolution,
+        frameRate: 30,
+        facingMode: newFacing  // Switch to rear or front
+      });
+
+      // Re-attach to local video element
+      const newCamPub = localParticipant.getTrackPublication(Track.Source.Camera);
+      if (newCamPub?.videoTrack) {
+        newCamPub.videoTrack.attach(document.getElementById("local-video"));
+      }
+
+      // Update button text (optional)
+      const btn = document.getElementById('camera-switch-btn');
+      btn.textContent = newFacing === 'user' ? "Switch to Rear" : "Switch to Front";
+
+      console.log("Switched to", newFacing === 'user' ? "front" : "rear", "camera");
+    } catch (err) {
+      console.error("Camera switch failed:", err);
+      alert("Failed to switch camera: " + err.message);
+    }
   };
 </script>
 </body>

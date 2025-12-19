@@ -24,6 +24,8 @@ async function startParticipant() {
             }
         });
 
+        window.room = room;  // ← ADD THIS LINE
+
         room.on(RoomEvent.TrackSubscribed, (track) => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
