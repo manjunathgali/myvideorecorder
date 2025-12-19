@@ -132,6 +132,14 @@ async function start() {
         });
         await room.localParticipant.setMicrophoneEnabled(true);
 
+        // ✅ DEBUG HERE
+        console.log("Host camera enabled:",
+            room.localParticipant.isCameraEnabled
+        );
+        console.log("Remote participants count:",
+            room.remoteParticipants.size
+        );
+
         const camPub =
             room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (camPub?.videoTrack) {
