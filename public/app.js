@@ -43,45 +43,51 @@ let lastTs = performance.now();
 
 function startNetworkMonitoring() {
     setInterval(async () => {
-        if (!room || !room.engine?.pcManager) return;
+        if (!room?.engine?.pcManager) return;
 
         const now = performance.now();
         const deltaSec = (now - lastTs) / 1000;
         lastTs = now;
 
-        let bytesSent = 0;
-        let bytesRecv = 0;
+        let sent = 0;
+        let recv = 0;
         let rttMs = 0;
         let jitterMs = 0;
 
-        const statsMap = await room.engine.pcManager.getStats();
+        // ---------- PUBLISHER (UPLOAD) ----------
+        const pubPC = room.engine.pcManager.publisher?.pc;
+        if (pubPC) {
+            const stats = await pubPC.getStats();
+            stats.forEach(stat => {
+                if (stat.type === "candidate-pair" && stat.state === "succeeded") {
+                    sent = stat.bytesSent || sent;
+                    rttMs = (stat.currentRoundTripTime || 0) * 1000;
+                }
+            });
+        }
 
-        statsMap.forEach(stat => {
+        // ---------- SUBSCRIBER (DOWNLOAD) ----------
+        const subPC = room.engine.pcManager.subscriber?.pc;
+        if (subPC) {
+            const stats = await subPC.getStats();
+            stats.forEach(stat => {
+                if (stat.type === "candidate-pair" && stat.state === "succeeded") {
+                    recv = stat.bytesReceived || recv;
+                }
+                if (stat.type === "inbound-rtp" && stat.kind === "video") {
+                    jitterMs = (stat.jitter || 0) * 1000;
+                }
+            });
+        }
 
-            // ✅ Active ICE connection
-            if (
-                stat.type === "candidate-pair" &&
-                stat.state === "succeeded" &&
-                stat.nominated
-            ) {
-                bytesSent = stat.bytesSent || bytesSent;
-                bytesRecv = stat.bytesReceived || bytesRecv;
-                rttMs = (stat.currentRoundTripTime || 0) * 1000;
-            }
-
-            // ✅ Inbound video jitter
-            if (stat.type === "inbound-rtp" && stat.kind === "video") {
-                jitterMs = (stat.jitter || 0) * 1000;
-            }
-        });
-
+        // ---------- CALCULATIONS ----------
         const hostMbps =
-            ((bytesSent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
+            ((sent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
         const partMbps =
-            ((bytesRecv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
+            ((recv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
 
-        lastBytesSent = bytesSent;
-        lastBytesRecv = bytesRecv;
+        lastBytesSent = sent;
+        lastBytesRecv = recv;
 
         document.getElementById("h-bitrate").innerText =
             Math.max(hostMbps, 0).toFixed(2) + " Mbps";
@@ -95,7 +101,6 @@ function startNetworkMonitoring() {
 
         document.getElementById("p-jitter").innerText =
             jitterMs.toFixed(1) + " ms";
-
     }, 1000);
 }
 
