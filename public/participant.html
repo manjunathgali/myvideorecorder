@@ -50,7 +50,11 @@
     }
 
     #local-video {
-      transform: scaleX(-1); /* Mirror selfie camera */
+      transform: scaleX(-1); /* Mirror front camera */
+    }
+
+    #local-video.rear {
+      transform: scaleX(1); /* No mirror for rear camera */
     }
 
     .controls {
@@ -97,20 +101,19 @@
 </div>
 
 <div class="controls">
-  <button id="camera-switch-btn">Switch Camera</button>
+  <button id="camera-switch-btn">Switch to Rear Camera</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script src="participant.js"></script>
 
 <script>
-  // Optional status update from participant.js
-  window.updateStatus = (msg) => {
-    document.getElementById('status').textContent = msg;
-  };
-  window.updateStatus("Loading...");
+  // Make room accessible to HTML
+  window.room = null;
 
-  // Camera Switch Button
+  // Camera switch logic
+  let currentFacingMode = 'user'; // start with front camera
+
   document.getElementById('camera-switch-btn').onclick = async () => {
     if (!window.room || !window.room.localParticipant) {
       alert("Not connected yet");
@@ -125,17 +128,18 @@
       return;
     }
 
-    // Toggle facing mode
-    const currentConstraints = cameraPub.videoTrack?.mediaStreamTrack.getConstraints();
-    const currentFacing = currentConstraints?.facingMode || 'user';
-    const newFacing = currentFacing === 'user' ? 'environment' : 'user';
+    // Toggle between user (front) and environment (rear)
+    const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
 
     try {
+      // Stop current camera
       await localParticipant.setCameraEnabled(false);
+
+      // Start new camera with desired facing mode
       await localParticipant.setCameraEnabled(true, {
         resolution: VideoPresets.h1440.resolution,
         frameRate: 30,
-        facingMode: newFacing  // Switch to rear or front
+        facingMode: newFacingMode
       });
 
       // Re-attach to local video element
@@ -144,16 +148,31 @@
         newCamPub.videoTrack.attach(document.getElementById("local-video"));
       }
 
-      // Update button text (optional)
-      const btn = document.getElementById('camera-switch-btn');
-      btn.textContent = newFacing === 'user' ? "Switch to Rear" : "Switch to Front";
+      // Update mirror style
+      const localVideo = document.getElementById("local-video");
+      if (newFacingMode === 'user') {
+        localVideo.classList.add('rear');
+      } else {
+        localVideo.classList.remove('rear');
+      }
 
-      console.log("Switched to", newFacing === 'user' ? "front" : "rear", "camera");
+      // Update button text
+      document.getElementById('camera-switch-btn').textContent =
+              newFacingMode === 'user' ? "Switch to Rear Camera" : "Switch to Front Camera";
+
+      currentFacingMode = newFacingMode;
+      console.log("Camera switched to", newFacingMode);
     } catch (err) {
       console.error("Camera switch failed:", err);
       alert("Failed to switch camera: " + err.message);
     }
   };
+
+  // Optional status update
+  window.updateStatus = (msg) => {
+    document.getElementById('status').textContent = msg;
+  };
+  window.updateStatus("Loading...");
 </script>
 </body>
 </html>

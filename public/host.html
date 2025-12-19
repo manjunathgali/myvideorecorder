@@ -190,11 +190,56 @@
       margin: 20px 0;
     }
 
+    /* Quality Reference Table */
+    .quality-reference {
+      margin: 40px auto 20px;
+      max-width: 1000px;
+      padding: 15px;
+      background: var(--surface);
+      border-radius: 12px;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    .quality-reference h3 {
+      text-align: center;
+      color: var(--accent);
+      margin-bottom: 15px;
+      font-size: 1rem;
+    }
+
+    .quality-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: monospace;
+    }
+
+    .quality-table th {
+      text-align: left;
+      padding: 6px;
+      border-bottom: 1px solid #333;
+    }
+
+    .quality-table td {
+      padding: 6px;
+    }
+
+    .quality-table th, .quality-table td {
+      text-align: center;
+    }
+
+    .quality-table th:first-child,
+    .quality-table td:first-child,
+    .quality-table td:last-child {
+      text-align: left;
+    }
+
     /* Responsive */
     @media (max-width: 1000px) {
       .video-grid { grid-template-columns: 1fr; }
       .tile { height: 50vh; }
       .stats-dashboard { grid-template-columns: 1fr; }
+      .quality-table { font-size: 0.75rem; }
     }
 
     @media (max-width: 600px) {
@@ -241,7 +286,7 @@
     <strong>HOST ↑ (Upload)</strong>
     <div class="stat-item">Bandwidth: <span id="h-bitrate" class="stat-value">0.00 Mbps</span></div>
     <div class="stat-item">Latency: <span id="h-latency" class="stat-value">0 ms</span></div>
-    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">0.0 ms</span></div>
+    <div class="stat-item">Jitter: <span id="h-jitter" class="stat-value">—</span></div>
     <div class="stat-item">Packet Loss: <span id="h-packet-loss" class="stat-value">0.00 %</span></div>
     <div class="stat-item">Quality: <span id="h-network-quality" class="stat-value">Good</span></div>
   </div>
@@ -254,6 +299,71 @@
     <div class="stat-item">Packet Loss: <span id="p-packet-loss" class="stat-value">0.00 %</span></div>
     <div class="stat-item">Quality: <span id="p-network-quality" class="stat-value">Good</span></div>
   </div>
+</div>
+
+<!-- Quality Reference Table -->
+<div class="quality-reference">
+  <h3>Network Quality Reference</h3>
+  <table class="quality-table">
+    <thead>
+    <tr>
+      <th>Quality</th>
+      <th>Upload</th>
+      <th>Download</th>
+      <th>Latency</th>
+      <th>Jitter</th>
+      <th>Packet Loss</th>
+      <th>Experience</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td>🎖️ Excellent</td>
+      <td>≥5 Mbps</td>
+      <td>≥3 Mbps</td>
+      <td>&lt;50ms</td>
+      <td>&lt;15ms</td>
+      <td>&lt;0.5%</td>
+      <td>High motion/full-screen max quality</td>
+    </tr>
+    <tr>
+      <td>✅ Good</td>
+      <td>≥1.5 Mbps</td>
+      <td>≥0.8 Mbps</td>
+      <td>&lt;100ms</td>
+      <td>&lt;30ms</td>
+      <td>&lt;1%</td>
+      <td>Typical smooth HD webcam call</td>
+    </tr>
+    <tr>
+      <td>⚠️ Fair</td>
+      <td>≥0.8 Mbps</td>
+      <td>≥0.4 Mbps</td>
+      <td>&lt;200ms</td>
+      <td>&lt;50ms</td>
+      <td>&lt;3%</td>
+      <td>Usable with reduced quality</td>
+    </tr>
+    <tr>
+      <td>❌ Poor</td>
+      <td>≥0.4 Mbps</td>
+      <td>≥0.2 Mbps</td>
+      <td>&lt;300ms</td>
+      <td>&lt;80ms</td>
+      <td>&lt;8%</td>
+      <td>Noticeable lag/freezing</td>
+    </tr>
+    <tr>
+      <td>💥 Bad</td>
+      <td>&lt;0.4 Mbps</td>
+      <td>&lt;0.2 Mbps</td>
+      <td>&gt;300ms</td>
+      <td>&gt;80ms</td>
+      <td>&gt;8%</td>
+      <td>Nearly unusable</td>
+    </tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- LiveKit SDK -->
