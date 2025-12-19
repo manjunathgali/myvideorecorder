@@ -36,18 +36,20 @@ function createMeter(stream, meterId) {
     update();
 }
 
-/* ================= NETWORK STATS - FIXED & WORKING ================= */
+/* ================= NETWORK STATS - IMPROVED & MORE ACCURATE ================= */
 let lastBytesSent = 0;
 let lastBytesRecv = 0;
+let lastPacketsLost = 0;
+let lastTotalPackets = 0;
 let lastTimestamp = performance.now();
 
 function startNetworkMonitoring() {
     setInterval(async () => {
-        if (!room || !room.engine) return;
+        if (!room?.engine?.pcManager) return;
 
         const now = performance.now();
-        const deltaTime = (now - lastTimestamp) / 1000; // seconds
-        if (deltaTime < 0.8) return; // Update ~every second
+        const deltaTime = (now - lastTimestamp) / 1000;
+        if (deltaTime < 0.8) return;
         lastTimestamp = now;
 
         let totalBytesSent = 0;
@@ -58,8 +60,8 @@ function startNetworkMonitoring() {
         let totalPackets = 0;
 
         try {
-            // Publisher connection (upload)
-            if (room.engine.pcManager?.publisher?.pc) {
+            // Publisher (upload)
+            if (room.engine.pcManager.publisher?.pc) {
                 const stats = await room.engine.pcManager.publisher.pc.getStats();
                 stats.forEach(report => {
                     if (report.type === 'outbound-rtp' && report.kind === 'video') {
@@ -67,59 +69,71 @@ function startNetworkMonitoring() {
                         packetsLost += report.packetsLost || 0;
                         totalPackets += report.packetsSent || 0;
                     }
-                    if (report.type === 'candidate-pair' && report.nominated) {
-                        rtt = report.currentRoundTripTime ? report.currentRoundTripTime * 1000 : rtt;
+                    if (report.type === 'candidate-pair' && report.nominated && report.state === 'succeeded') {
+                        rtt = Math.max(rtt, (report.currentRoundTripTime || 0) * 1000);
                     }
                 });
             }
 
-            // Subscriber connection (download)
-            if (room.engine.pcManager?.subscriber?.pc) {
+            // Subscriber (download)
+            if (room.engine.pcManager.subscriber?.pc) {
                 const stats = await room.engine.pcManager.subscriber.pc.getStats();
                 stats.forEach(report => {
                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
                         totalBytesReceived += report.bytesReceived || 0;
-                        jitter = report.jitter ? report.jitter * 1000 : jitter;
+                        jitter = Math.max(jitter, (report.jitter || 0) * 1000);
                         packetsLost += report.packetsLost || 0;
                         totalPackets += report.packetsReceived || 0;
                     }
                 });
             }
         } catch (err) {
-            console.warn("Could not get stats:", err);
+            console.warn("Stats fetch error:", err);
             return;
         }
 
-        // Calculate bitrates
         const uploadMbps = ((totalBytesSent - lastBytesSent) * 8) / (deltaTime * 1_000_000);
         const downloadMbps = ((totalBytesReceived - lastBytesRecv) * 8) / (deltaTime * 1_000_000);
 
         lastBytesSent = totalBytesSent;
         lastBytesRecv = totalBytesReceived;
 
-        const packetLossPct = totalPackets > 0 ? ((packetsLost / totalPackets) * 100).toFixed(2) : "0.00";
+        const currentPacketLoss = totalPackets - lastTotalPackets > 0
+            ? ((packetsLost - lastPacketsLost) / (totalPackets - lastTotalPackets)) * 100
+            : 0;
+
+        lastPacketsLost = packetsLost;
+        lastTotalPackets = totalPackets;
+
+        const packetLossPct = currentPacketLoss.toFixed(2);
 
         // Update UI
         document.getElementById("h-bitrate").innerText = uploadMbps.toFixed(2) + " Mbps ↑";
         document.getElementById("p-bitrate").innerText = downloadMbps.toFixed(2) + " Mbps ↓";
         document.getElementById("h-latency").innerText = rtt.toFixed(0) + " ms";
         document.getElementById("p-latency").innerText = rtt.toFixed(0) + " ms";
-        document.getElementById("h-jitter").innerText = "—"; // Host jitter not available
+        document.getElementById("h-jitter").innerText = "—";  // Outbound jitter not available
         document.getElementById("p-jitter").innerText = jitter.toFixed(1) + " ms";
         document.getElementById("h-packet-loss").innerText = packetLossPct + " %";
         document.getElementById("p-packet-loss").innerText = packetLossPct + " %";
 
-        // Simple quality indicator
-        const quality = uploadMbps > 2 && downloadMbps > 1 && rtt < 150 && jitter < 30 && parseFloat(packetLossPct) < 2
-            ? "Good"
-            : uploadMbps < 0.5 || downloadMbps < 0.3 || parseFloat(packetLossPct) > 5
-                ? "Poor"
-                : "Fair";
+        // Relaxed realistic quality thresholds
+        let quality = "Good";
+        let qualityColor = "#00c853";
+
+        if (uploadMbps < 1 || downloadMbps < 0.5 || rtt > 150 || jitter > 50 || parseFloat(packetLossPct) > 3) {
+            quality = "Fair";
+            qualityColor = "#ffaa00";
+        }
+        if (uploadMbps < 0.5 || downloadMbps < 0.2 || rtt > 300 || jitter > 100 || parseFloat(packetLossPct) > 10) {
+            quality = "Poor";
+            qualityColor = "#ff4444";
+        }
 
         document.getElementById("h-network-quality").innerText = quality;
         document.getElementById("p-network-quality").innerText = quality;
-        document.getElementById("h-network-quality").style.color = quality === "Good" ? "#00c853" : quality === "Poor" ? "#ff4444" : "#ffaa00";
-        document.getElementById("p-network-quality").style.color = document.getElementById("h-network-quality").style.color;
+        document.getElementById("h-network-quality").style.color = qualityColor;
+        document.getElementById("p-network-quality").style.color = qualityColor;
     }, 1000);
 }
 
