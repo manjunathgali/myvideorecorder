@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mobile Camera Switch</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: white;
+        }
+
+        h2 {
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+            background: #111;
+            font-size: 1.4rem;
+        }
+
+        #video {
+            flex: 1;
+            width: 100%;
+            object-fit: contain;
+            background: black;
+        }
+
+        .controls {
+            padding: 15px;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        button {
+            background: #00aaff;
+            color: black;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        button:active {
+            background: #0088cc;
+        }
+
+        .status {
+            text-align: center;
+            padding: 8px;
+            font-size: 0.9rem;
+            background: #222;
+        }
+    </style>
+</head>
+<body>
+<h2>Mobile Camera Switch</h2>
+<div class="status" id="status">Loading camera...</div>
+
+<video id="video" autoplay playsinline muted></video>
+
+<div class="controls">
+    <button id="switch-btn">Switch to Rear Camera</button>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const switchBtn = document.getElementById('switch-btn');
+
+    let currentFacingMode = 'user'; // Start with front (selfie) camera
+    let stream = null;
+
+    async function startCamera(facingMode = 'user') {
+        // Stop previous stream
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+
+        const constraints = {
+            video: {
+                facingMode: facingMode,  // 'user' = front, 'environment' = rear
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            },
+            audio: false
+        };
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+
+            // Update mirror for front camera only
+            if (facingMode === 'user') {
+                video.style.transform = 'scaleX(-1)'; // Mirror selfie
+            } else {
+                video.style.transform = 'scaleX(1)'; // No mirror for rear
+            }
+
+            status.textContent = `Using ${facingMode === 'user' ? 'Front' : 'Rear'} Camera`;
+            switchBtn.textContent = facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera';
+        } catch (err) {
+            console.error("Camera error:", err);
+            status.textContent = "Camera access denied or not available";
+            status.style.color = "#ff4444";
+        }
+    }
+
+    // Toggle camera
+    switchBtn.onclick = () => {
+        currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+        startCamera(currentFacingMode);
+    };
+
+    // Start with front camera
+    startCamera('user');
+</script>
+</body>
+</html>
