@@ -41,6 +41,17 @@ let lastBytesSent = 0;
 let lastBytesRecv = 0;
 let lastTs = performance.now();
 
+function classifyQuality({ bandwidth, latency, jitter, packetLoss }) {
+    if (packetLoss > 2 || latency > 200 || jitter > 30 || bandwidth < 0.3) {
+        return { label: "Poor", color: "#ff4444" };
+    }
+
+    if (packetLoss > 1 || latency > 100 || jitter > 20 || bandwidth < 1) {
+        return { label: "Warning", color: "#ffaa00" };
+    }
+
+    return { label: "Good", color: "#00c853" };
+}
 function startNetworkMonitoring() {
     setInterval(async () => {
         if (!room?.engine?.pcManager) return;
@@ -53,34 +64,42 @@ function startNetworkMonitoring() {
         let recv = 0;
         let rttMs = 0;
         let jitterMs = 0;
+        let packetsLost = 0;
+        let packetsTotal = 0;
 
-        // ---------- PUBLISHER (UPLOAD) ----------
+        // ---------- UPLOAD ----------
         const pubPC = room.engine.pcManager.publisher?.pc;
         if (pubPC) {
             const stats = await pubPC.getStats();
             stats.forEach(stat => {
                 if (stat.type === "candidate-pair" && stat.state === "succeeded") {
-                    sent = stat.bytesSent || sent;
+                    sent += stat.bytesSent || 0;
                     rttMs = (stat.currentRoundTripTime || 0) * 1000;
+                }
+                if (stat.type === "outbound-rtp" && stat.kind === "video") {
+                    packetsTotal += stat.packetsSent || 0;
+                    packetsLost += stat.packetsLost || 0;
                 }
             });
         }
 
-        // ---------- SUBSCRIBER (DOWNLOAD) ----------
+        // ---------- DOWNLOAD ----------
         const subPC = room.engine.pcManager.subscriber?.pc;
         if (subPC) {
             const stats = await subPC.getStats();
             stats.forEach(stat => {
                 if (stat.type === "candidate-pair" && stat.state === "succeeded") {
-                    recv = stat.bytesReceived || recv;
+                    recv += stat.bytesReceived || 0;
                 }
                 if (stat.type === "inbound-rtp" && stat.kind === "video") {
                     jitterMs = (stat.jitter || 0) * 1000;
+                    packetsTotal += stat.packetsReceived || 0;
+                    packetsLost += stat.packetsLost || 0;
                 }
             });
         }
 
-        // ---------- CALCULATIONS ----------
+        // ---------- METRICS ----------
         const hostMbps =
             ((sent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
         const partMbps =
@@ -89,6 +108,18 @@ function startNetworkMonitoring() {
         lastBytesSent = sent;
         lastBytesRecv = recv;
 
+        const packetLossPct =
+            packetsTotal > 0 ? (packetsLost / packetsTotal) * 100 : 0;
+
+        // ---------- QUALITY ----------
+        const hostQuality = classifyQuality({
+            bandwidth: hostMbps,
+            latency: rttMs,
+            jitter: jitterMs,
+            packetLoss: packetLossPct
+        });
+
+        // ---------- UI ----------
         document.getElementById("h-bitrate").innerText =
             Math.max(hostMbps, 0).toFixed(2) + " Mbps";
         document.getElementById("p-bitrate").innerText =
@@ -101,8 +132,17 @@ function startNetworkMonitoring() {
 
         document.getElementById("p-jitter").innerText =
             jitterMs.toFixed(1) + " ms";
+
+        document.getElementById("packet-loss").innerText =
+            packetLossPct.toFixed(2) + " %";
+
+        const qualityEl = document.getElementById("network-quality");
+        qualityEl.innerText = hostQuality.label;
+        qualityEl.style.color = hostQuality.color;
+
     }, 1000);
 }
+
 
 
 /* ================= RECORD TIMER ================= */
