@@ -7,98 +7,100 @@ let audioCtx;
 let timerInterval;
 let secondsElapsed = 0;
 
-// ---------- NETWORK STATS ----------
-let lastSampleTime = performance.now();
-let prevHostBytes = 0;
-let prevPartBytes = 0;
-
-// ---------- AUDIO CONTEXT ----------
+/* ================= AUDIO CONTEXT ================= */
 function ensureAudioContext() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 }
 
-// ---------- AUDIO METER ----------
+/* ================= AUDIO METER ================= */
 function createMeter(stream, meterId) {
     ensureAudioContext();
+
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
 
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    const meterElement = document.getElementById(meterId);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const meter = document.getElementById(meterId);
 
     function update() {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
-        for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
-        if (meterElement) meterElement.value = (sum / bufferLength) * 1.5;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        if (meter) meter.value = (sum / dataArray.length) * 1.5;
         requestAnimationFrame(update);
     }
     update();
 }
 
-// ---------- NETWORK MONITOR ----------
+/* ================= NETWORK STATS ================= */
+let lastBytesSent = 0;
+let lastBytesRecv = 0;
+let lastTs = performance.now();
+
 function startNetworkMonitoring() {
     setInterval(async () => {
         if (!room) return;
 
         const now = performance.now();
-        const deltaSeconds = (now - lastSampleTime) / 1000;
-        lastSampleTime = now;
+        const deltaSec = (now - lastTs) / 1000;
+        lastTs = now;
 
-        // ---- HOST (Outbound video) ----
-        let hostBytes = 0;
-        const localStats = await room.localParticipant.getStats();
-        localStats.forEach(stat => {
-            if (stat.type === "outbound-rtp" && stat.kind === "video") {
-                hostBytes += stat.bytesSent || 0;
-            }
+        let bytesSent = 0;
+        let bytesRecv = 0;
+        let rttMs = 0;
+        let jitterMs = 0;
+
+        const stats = await room.getStats();
+
+        stats.forEach(report => {
+            report.stats.forEach(stat => {
+
+                // Active ICE candidate
+                if (
+                    stat.type === "candidate-pair" &&
+                    stat.state === "succeeded" &&
+                    stat.nominated
+                ) {
+                    bytesSent += stat.bytesSent || 0;
+                    bytesRecv += stat.bytesReceived || 0;
+                    rttMs = (stat.currentRoundTripTime || 0) * 1000;
+                }
+
+                // Jitter (video inbound)
+                if (stat.type === "inbound-rtp" && stat.kind === "video") {
+                    jitterMs = (stat.jitter || 0) * 1000;
+                }
+            });
         });
 
         const hostMbps =
-            ((hostBytes - prevHostBytes) * 8) / (deltaSeconds * 1_000_000);
-        prevHostBytes = hostBytes;
+            ((bytesSent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
+        const partMbps =
+            ((bytesRecv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
+
+        lastBytesSent = bytesSent;
+        lastBytesRecv = bytesRecv;
 
         document.getElementById("h-bitrate").innerText =
             Math.max(hostMbps, 0).toFixed(2) + " Mbps";
+        document.getElementById("p-bitrate").innerText =
+            Math.max(partMbps, 0).toFixed(2) + " Mbps";
 
-        // ---- PARTICIPANT (Inbound video) ----
-        for (const participant of room.remoteParticipants.values()) {
-            let partBytes = 0;
-            let jitterMs = 0;
-            let rttMs = 0;
+        document.getElementById("h-latency").innerText =
+            rttMs.toFixed(0) + " ms";
+        document.getElementById("p-latency").innerText =
+            rttMs.toFixed(0) + " ms";
 
-            const stats = await participant.getStats();
-            stats.forEach(stat => {
-                if (stat.type === "inbound-rtp" && stat.kind === "video") {
-                    partBytes += stat.bytesReceived || 0;
-                    jitterMs = (stat.jitter || 0) * 1000;
-                    rttMs =
-                        ((stat.roundTripTime || stat.currentRoundTripTime) || 0) * 1000;
-                }
-            });
-
-            const partMbps =
-                ((partBytes - prevPartBytes) * 8) / (deltaSeconds * 1_000_000);
-            prevPartBytes = partBytes;
-
-            document.getElementById("p-bitrate").innerText =
-                Math.max(partMbps, 0).toFixed(2) + " Mbps";
-            document.getElementById("p-jitter").innerText =
-                jitterMs.toFixed(1) + " ms";
-            document.getElementById("p-latency").innerText =
-                rttMs.toFixed(0) + " ms";
-            document.getElementById("h-latency").innerText =
-                rttMs.toFixed(0) + " ms";
-        }
+        document.getElementById("p-jitter").innerText =
+            jitterMs.toFixed(1) + " ms";
     }, 1000);
 }
 
-// ---------- RECORDING TIMER ----------
+/* ================= RECORD TIMER ================= */
 function updateTimer() {
     secondsElapsed++;
     const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, "0");
@@ -106,7 +108,7 @@ function updateTimer() {
     document.getElementById("record-timer").innerText = `REC ${mins}:${secs}`;
 }
 
-// ---------- START ----------
+/* ================= START ================= */
 async function start() {
     try {
         const identity = "host-" + Math.floor(Math.random() * 1000);
@@ -117,11 +119,13 @@ async function start() {
 
         room.on(RoomEvent.TrackSubscribed, track => {
             if (track.kind === Track.Kind.Video) {
-                const el = document.getElementById("remote-video");
-                if (el) track.attach(el);
+                track.attach(document.getElementById("remote-video"));
             }
             if (track.kind === Track.Kind.Audio) {
-                createMeter(new MediaStream([track.mediaStreamTrack]), "remote-meter");
+                createMeter(
+                    new MediaStream([track.mediaStreamTrack]),
+                    "remote-meter"
+                );
             }
         });
 
@@ -132,19 +136,12 @@ async function start() {
         });
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        // ✅ DEBUG HERE
-        console.log("Host camera enabled:",
-            room.localParticipant.isCameraEnabled
-        );
-        console.log("Remote participants count:",
-            room.remoteParticipants.size
-        );
+        console.log("Camera enabled:", room.localParticipant.isCameraEnabled);
+        console.log("Remote participants:", room.remoteParticipants.size);
 
         const camPub =
             room.localParticipant.getTrackPublication(Track.Source.Camera);
-        if (camPub?.videoTrack) {
-            camPub.videoTrack.attach(document.getElementById("local-video"));
-        }
+        camPub?.videoTrack?.attach(document.getElementById("local-video"));
 
         const micPub =
             room.localParticipant.getTrackPublication(Track.Source.Microphone);
@@ -161,12 +158,14 @@ async function start() {
     }
 }
 
-// ---------- RECORDING ----------
+/* ================= RECORDING ================= */
 const startBtn = document.getElementById("start-btn");
 const stopBtn = document.getElementById("stop-btn");
 
 startBtn.onclick = async () => {
     ensureAudioContext();
+
+    if (audioCtx.state === "suspended") await audioCtx.resume();
 
     const localVid = document.getElementById("local-video");
     const remoteVid = document.getElementById("remote-video");
@@ -178,6 +177,7 @@ startBtn.onclick = async () => {
 
     const dest = audioCtx.createMediaStreamDestination();
 
+    // Host mic
     const micPub =
         room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (micPub?.audioTrack) {
@@ -187,6 +187,19 @@ startBtn.onclick = async () => {
             )
             .connect(dest);
     }
+
+    // Remote participant audio
+    room.remoteParticipants.forEach(p => {
+        p.getTrackPublications().forEach(pub => {
+            if (pub.audioTrack?.isSubscribed) {
+                audioCtx
+                    .createMediaStreamSource(
+                        new MediaStream([pub.audioTrack.mediaStreamTrack])
+                    )
+                    .connect(dest);
+            }
+        });
+    });
 
     function draw() {
         if (mediaRecorder?.state !== "recording") return;
@@ -231,4 +244,5 @@ startBtn.onclick = async () => {
 
 stopBtn.onclick = () => mediaRecorder.stop();
 
+/* ================= BOOT ================= */
 start();
