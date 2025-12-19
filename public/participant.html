@@ -4,22 +4,39 @@
   <meta charset="UTF-8" />
   <title>LiveKit Participant</title>
   <style>
-    body { background: #111; color: #fff; font-family: Arial; }
+    body { background: #111; color: #fff; font-family: Arial; padding: 20px; }
+    h2 { color: #0af; margin-bottom: 15px; }
     .video-grid {
       display: flex;
       gap: 20px;
+      flex-wrap: wrap;
       padding: 20px;
       background: #222;
       border-radius: 8px;
     }
     .tile {
       width: 400px;
+      max-width: 100%;
       height: 300px;
       background: black;
       border: 2px solid #444;
       border-radius: 4px;
       object-fit: cover;
     }
+    .controls {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-right: 10px;
+      border: none;
+      border-radius: 5px;
+      background: #0af;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background: #0ff; }
   </style>
 </head>
 <body>
@@ -31,7 +48,74 @@
   <video id="remote-video" class="tile" autoplay playsinline></video>
 </div>
 
+<div class="controls">
+  <button id="front-btn">Front Camera</button>
+  <button id="back-btn">Back Camera</button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script src="participant.js"></script>
+<script>
+  const { Room, RoomEvent, Track, LocalVideoTrack, VideoPresets } = LivekitClient;
+  let room;
+  let localVideoTrack;
+
+  /* ================= HELPER ================= */
+  async function getCameraDevice(facingMode) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === "videoinput");
+    // Try to match by label (front/back) or fallback to first
+    for (const dev of videoDevices) {
+      if (facingMode === "user" && dev.label.toLowerCase().includes("front")) return dev.deviceId;
+      if (facingMode === "environment" && dev.label.toLowerCase().includes("back")) return dev.deviceId;
+    }
+    return videoDevices[0]?.deviceId;
+  }
+
+  /* ================= SWITCH CAMERA ================= */
+  async function switchCamera(facingMode) {
+    if (!room) return;
+    const deviceId = await getCameraDevice(facingMode);
+    if (!deviceId) return alert("Camera not found");
+
+    const newTrack = await LocalVideoTrack.create({
+      deviceId,
+      resolution: VideoPresets.h720.resolution,
+    });
+
+    // Replace existing camera track
+    if (localVideoTrack) {
+      await room.localParticipant.replaceTrack(localVideoTrack, newTrack);
+      localVideoTrack.stop();
+    }
+
+    localVideoTrack = newTrack;
+    localVideoTrack.attach(document.getElementById("local-video"));
+  }
+
+  /* ================= ROOM SETUP ================= */
+  async function start() {
+    const identity = "participant-" + Math.floor(Math.random() * 1000);
+    const res = await fetch(`/api/get-token?room=my-room&identity=${identity}`);
+    const { token } = await res.json();
+
+    room = new Room({ adaptiveStream: true, dynacast: true });
+
+    room.on(RoomEvent.TrackSubscribed, track => {
+      if (track.kind === Track.Kind.Video) track.attach(document.getElementById("remote-video"));
+    });
+
+    await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
+
+    // Start with front camera by default
+    await switchCamera("user");
+  }
+
+  /* ================= BUTTON EVENTS ================= */
+  document.getElementById("front-btn").onclick = () => switchCamera("user");
+  document.getElementById("back-btn").onclick = () => switchCamera("environment");
+
+  /* ================= START ================= */
+  start();
+</script>
 </body>
 </html>
