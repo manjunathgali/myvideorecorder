@@ -117,30 +117,30 @@ function startNetworkMonitoring() {
         document.getElementById("p-packet-loss").innerText = packetLossPct + " %";
 
         // ================= REALISTIC QUALITY FOR WEBCAM CALLS =================
-        let quality = "Excellent";
-        let qualityColor = "#4caf50";
+        let quality = "Good";  // Default to Good for typical calls
+        let qualityColor = "#00c853";
 
-        // Excellent: High motion/full-screen/max layers
-        if (uploadMbps >= 5 && downloadMbps >= 3 && rtt < 50 && jitter < 15 && parseFloat(packetLossPct) < 0.5) {
+        // Excellent: High motion, full-screen, max layers active
+        if (uploadMbps >= 4 && downloadMbps >= 2.5 && rtt < 50 && jitter < 15 && parseFloat(packetLossPct) < 0.5) {
             quality = "Excellent";
             qualityColor = "#4caf50";
         }
-        // Good: Typical smooth HD call (your current numbers qualify here)
-        else if (uploadMbps >= 1.5 && downloadMbps >= 0.8 && rtt < 100 && jitter < 30 && parseFloat(packetLossPct) < 1) {
+        // Good: Smooth HD — this is what most real calls look like
+        else if (uploadMbps >= 1.2 && downloadMbps >= 0.6 && rtt < 120 && jitter < 40 && parseFloat(packetLossPct) < 2) {
             quality = "Good";
             qualityColor = "#00c853";
         }
-        // Fair: Usable but reduced quality
-        else if (uploadMbps >= 0.8 && downloadMbps >= 0.4 && rtt < 200 && jitter < 50 && parseFloat(packetLossPct) < 3) {
+        // Fair: Reduced but still usable
+        else if (uploadMbps >= 0.6 && downloadMbps >= 0.3 && rtt < 200 && jitter < 60 && parseFloat(packetLossPct) < 5) {
             quality = "Fair";
             qualityColor = "#ffaa00";
         }
         // Poor: Noticeable issues
-        else if (uploadMbps >= 0.4 && downloadMbps >= 0.2 && rtt < 300 && jitter < 80 && parseFloat(packetLossPct) < 8) {
+        else if (uploadMbps >= 0.3 && downloadMbps >= 0.1 && rtt < 300 && jitter < 100 && parseFloat(packetLossPct) < 10) {
             quality = "Poor";
             qualityColor = "#ff4444";
         }
-        // Bad: Unusable
+        // Bad: Really broken
         else {
             quality = "Bad";
             qualityColor = "#d32f2f";
