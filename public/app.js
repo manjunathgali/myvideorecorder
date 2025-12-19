@@ -143,7 +143,7 @@ async function start() {
             },
         });
 
-        // Subscribe to remote (participant) tracks — ONLY HERE
+        // Main subscription for video display + remote meter
         room.on(RoomEvent.TrackSubscribed, track => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
@@ -207,9 +207,9 @@ startBtn.onclick = async () => {
         ).connect(dest);
     }
 
-    // Current remote participants' audio
-    room.remoteParticipants.values().forEach(participant => {
-        participant.audioTracks.values().forEach(publication => {
+    // Current remote participants' audio (safe Array.from for older versions)
+    Array.from(room.remoteParticipants.values()).forEach(participant => {
+        Array.from(participant.audioTracks.values()).forEach(publication => {
             if (publication.audioTrack?.isSubscribed) {
                 audioCtx.createMediaStreamSource(
                     new MediaStream([publication.audioTrack.mediaStreamTrack])
@@ -218,7 +218,7 @@ startBtn.onclick = async () => {
         });
     });
 
-    // Future remote audio tracks (new joins or resubscribes)
+    // Future remote audio tracks
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio && participant !== room.localParticipant) {
             audioCtx.createMediaStreamSource(
