@@ -27,7 +27,7 @@ async function startParticipant() {
             }
         });
 
-        window.room = room;  // Make room accessible from HTML
+        window.room = room;
 
         room.on(RoomEvent.TrackSubscribed, (track) => {
             if (track.kind === Track.Kind.Video) {
@@ -43,7 +43,7 @@ async function startParticipant() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        // Start with front camera (user)
+        // Start with front camera
         await switchCamera('user');
 
         await room.localParticipant.setMicrophoneEnabled(true);
@@ -57,7 +57,7 @@ async function startParticipant() {
     }
 }
 
-// Function to switch camera (front/rear)
+// Global function to switch camera
 window.switchCamera = async function(facingMode = 'user') {
     if (!room || !room.localParticipant) {
         console.warn("Room not ready yet");
@@ -65,40 +65,36 @@ window.switchCamera = async function(facingMode = 'user') {
     }
 
     try {
-        // Get new stream with desired camera
         const constraints = {
             video: {
-                facingMode: facingMode,  // 'user' = front, 'environment' = rear
+                facingMode: facingMode,
                 width: { ideal: 1920 },
                 height: { ideal: 1080 }
             }
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const videoTrack = stream.getVideoTracks()[0];
+        const newVideoTrack = stream.getVideoTracks()[0];
 
-        // Replace the existing camera track
         const cameraPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
-        if (cameraPub) {
-            await cameraPub.track.replaceWith(videoTrack);
+
+        if (cameraPub && cameraPub.track) {
+            // Correct method: replaceTrack
+            await cameraPub.track.replaceTrack(newVideoTrack);
         } else {
-            // First time enabling
-            await room.localParticipant.publishTrack(videoTrack, {
-                source: Track.Source.Camera,
-                videoEncoding: {
-                    maxBitrate: 5000000,  // High quality
-                    maxFramerate: 30
-                }
+            // First time - publish new track
+            await room.localParticipant.publishTrack(newVideoTrack, {
+                source: Track.Source.Camera
             });
         }
 
-        // Re-attach to local preview
-        const newCamPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
-        if (newCamPub?.videoTrack) {
-            newCamPub.videoTrack.attach(document.getElementById("local-video"));
+        // Re-attach to preview
+        const updatedPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (updatedPub?.videoTrack) {
+            updatedPub.videoTrack.attach(document.getElementById("local-video"));
         }
 
-        // Update mirror class
+        // Mirror handling
         const localVideo = document.getElementById("local-video");
         if (facingMode === 'user') {
             localVideo.classList.remove('rear');
@@ -106,7 +102,7 @@ window.switchCamera = async function(facingMode = 'user') {
             localVideo.classList.add('rear');
         }
 
-        // Update button text
+        // Update button
         const btn = document.getElementById('camera-switch-btn');
         if (btn) {
             btn.textContent = facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera';
@@ -116,7 +112,7 @@ window.switchCamera = async function(facingMode = 'user') {
         return true;
     } catch (err) {
         console.error("Camera switch failed:", err);
-        alert("Failed to access camera: " + err.message);
+        alert("Failed to switch camera: " + err.message);
         return false;
     }
 };
