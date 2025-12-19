@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>LiveKit Participant (Mobile Compatible)</title>
+  <title>LiveKit Participant (Fixed)</title>
   <style>
     body { background: #111; color: #fff; font-family: Arial; padding: 20px; }
     h2 { color: #0af; margin-bottom: 15px; text-align: center; }
@@ -58,41 +58,38 @@
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <script>
   const { Room, RoomEvent, Track, LocalVideoTrack, VideoPresets } = LivekitClient;
-
   let room;
   let localVideoTrack;
-
-  /* ================= GET CAMERA STREAM ================= */
-  async function getCameraStream(facingMode) {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { facingMode }, // "user" = front, "environment" = back
-        audio: true
-      });
-    } catch (err) {
-      console.error("Cannot access camera:", err);
-      alert("Camera not available: " + err.message);
-    }
-  }
 
   /* ================= SWITCH CAMERA ================= */
   async function switchCamera(facingMode) {
     if (!room) return;
-    const stream = await getCameraStream(facingMode);
-    if (!stream) return;
 
-    const track = new LocalVideoTrack({
-      mediaStreamTrack: stream.getVideoTracks()[0],
-      resolution: VideoPresets.h720.resolution
-    });
+    try {
+      // Get MediaStream with facingMode
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: false
+      });
 
-    if (localVideoTrack) {
-      await room.localParticipant.replaceTrack(localVideoTrack, track);
-      localVideoTrack.stop();
+      // Create LiveKit LocalVideoTrack (pass MediaStreamTrack directly)
+      const newTrack = new LocalVideoTrack(
+              stream.getVideoTracks()[0],
+              { resolution: VideoPresets.h720.resolution }
+      );
+
+      // Replace existing track if exists
+      if (localVideoTrack) {
+        await room.localParticipant.replaceTrack(localVideoTrack, newTrack);
+        localVideoTrack.stop();
+      }
+
+      localVideoTrack = newTrack;
+      localVideoTrack.attach(document.getElementById("local-video"));
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Cannot access camera: " + err.message);
     }
-
-    localVideoTrack = track;
-    localVideoTrack.attach(document.getElementById("local-video"));
   }
 
   /* ================= START ROOM ================= */
