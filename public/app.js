@@ -59,7 +59,6 @@ function startNetworkMonitoring() {
         let sent = 0, recv = 0, rttMs = 0, jitterMs = 0;
         let packetsLost = 0, packetsSent = 0, packetsRecv = 0;
 
-        // Publisher (upload)
         const pubPC = room.engine.pcManager.publisher?.pc;
         if (pubPC) {
             const stats = await pubPC.getStats();
@@ -75,7 +74,6 @@ function startNetworkMonitoring() {
             });
         }
 
-        // Subscriber (download)
         const subPC = room.engine.pcManager.subscriber?.pc;
         if (subPC) {
             const stats = await subPC.getStats();
@@ -106,7 +104,6 @@ function startNetworkMonitoring() {
             packetLoss: packetLossPct
         });
 
-        // Update UI
         document.getElementById("h-bitrate").innerText = uploadMbps.toFixed(2) + " Mbps ↑";
         document.getElementById("p-bitrate").innerText = downloadMbps.toFixed(2) + " Mbps ↓";
         document.getElementById("h-latency").innerText = rttMs.toFixed(0) + " ms";
@@ -141,12 +138,12 @@ async function start() {
             adaptiveStream: true,
             dynacast: true,
             publishDefaults: {
-                videoCodec: "vp9",                  // High quality where supported
-                backupCodec: { codec: "vp8" },      // Fallback for Safari etc.
+                videoCodec: "vp9",
+                backupCodec: { codec: "vp8" },
             },
         });
 
-        // Remote tracks (participant)
+        // Subscribe to remote (participant) tracks — ONLY HERE
         room.on(RoomEvent.TrackSubscribed, track => {
             if (track.kind === Track.Kind.Video) {
                 track.attach(document.getElementById("remote-video"));
@@ -158,20 +155,17 @@ async function start() {
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        // Use h1440 for excellent quality on most devices (falls back gracefully)
         await room.localParticipant.setCameraEnabled(true, {
             resolution: VideoPresets.h1440.resolution,
             frameRate: 30
         });
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        // Attach local video
         const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
         if (camPub?.videoTrack) {
             camPub.videoTrack.attach(document.getElementById("local-video"));
         }
 
-        // Local mic meter
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         if (micPub?.audioTrack) {
             createMeter(new MediaStream([micPub.audioTrack.mediaStreamTrack]), "local-meter");
@@ -199,20 +193,19 @@ startBtn.onclick = async () => {
     const localVid = document.getElementById("local-video");
     const remoteVid = document.getElementById("remote-video");
 
-    // Canvas for 1440p side-by-side composite
     const canvas = document.createElement("canvas");
-    canvas.width = 2560;   // 1280 × 2
+    canvas.width = 2560;
     canvas.height = 1440;
     const ctx = canvas.getContext("2d");
     const dest = audioCtx.createMediaStreamDestination();
 
-    // Mix local microphone
+    // Local mic
     const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
     if (micPub?.audioTrack) {
         audioCtx.createMediaStreamSource(new MediaStream([micPub.audioTrack.mediaStreamTrack])).connect(dest);
     }
 
-    // Mix current remote audio
+    // Current remote audio
     room.remoteParticipants.forEach(participant => {
         participant.audioTracks.forEach(pub => {
             if (pub.audioTrack?.isSubscribed) {
@@ -221,7 +214,7 @@ startBtn.onclick = async () => {
         });
     });
 
-    // Handle future remote audio tracks
+    // Future remote audio tracks (new participants or re-subscribes)
     room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
         if (track.kind === Track.Kind.Audio && participant !== room.localParticipant) {
             audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack])).connect(dest);
@@ -242,7 +235,6 @@ startBtn.onclick = async () => {
         ...dest.stream.getAudioTracks()
     ]);
 
-    // Choose best supported codec
     let mimeType = "video/webm";
     if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) mimeType = "video/webm;codecs=vp9,opus";
     else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) mimeType = "video/webm;codecs=vp8,opus";
@@ -250,7 +242,7 @@ startBtn.onclick = async () => {
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
-        videoBitsPerSecond: 12_000_000  // 12 Mbps – great quality for 1440p
+        videoBitsPerSecond: 12_000_000
     });
 
     recordedChunks = [];
@@ -273,7 +265,7 @@ startBtn.onclick = async () => {
         stopBtn.disabled = true;
     };
 
-    mediaRecorder.start(1000); // 1-second chunks
+    mediaRecorder.start(1000);
     draw();
     timerInterval = setInterval(updateTimer, 1000);
 
