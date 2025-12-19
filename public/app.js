@@ -34,48 +34,74 @@ function createMeter(stream, meterId) {
     update();
 }
 
-// 2. Network Monitoring Logic (Fixed)
+let lastSampleTime = performance.now();
+let prevHostBytes = 0;
+let prevPartBytes = 0;
+
 function startNetworkMonitoring() {
     setInterval(async () => {
         if (!room) return;
 
-        // Host Stats
+        const now = performance.now();
+        const deltaSeconds = (now - lastSampleTime) / 1000;
+        lastSampleTime = now;
+
+        // ---------- HOST (Outbound video bitrate) ----------
+        let hostBytes = 0;
+        let hostJitter = 0;
+        let hostRtt = 0;
+
         const localStats = await room.localParticipant.getStats();
         localStats.forEach(stat => {
-            if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
-                const mbps = ((stat.bytesSent - prevHostBytes) * 8) / 1000000;
-                document.getElementById('h-bitrate').innerText = Math.max(0, mbps).toFixed(2) + " Mbps";
-                prevHostBytes = stat.bytesSent;
+            if (stat.type === "outbound-rtp" && stat.kind === "video") {
+                hostBytes += stat.bytesSent || 0;
             }
         });
 
-        // Participant Stats
-        room.remoteParticipants.forEach(async (participant) => {
+        const hostMbps =
+            ((hostBytes - prevHostBytes) * 8) / (deltaSeconds * 1_000_000);
+
+        prevHostBytes = hostBytes;
+
+        document.getElementById("h-bitrate").innerText =
+            Math.max(hostMbps, 0).toFixed(2) + " Mbps";
+
+        // ---------- PARTICIPANT (Inbound video bitrate) ----------
+        for (const participant of room.remoteParticipants.values()) {
+            let partBytes = 0;
+            let jitterMs = 0;
+            let rttMs = 0;
+
             const stats = await participant.getStats();
             stats.forEach(stat => {
-                if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
-                    const mbps = ((stat.bytesReceived - prevPartBytes) * 8) / 1000000;
-                    const jitter = stat.jitter * 1000;
-
-                    document.getElementById('p-bitrate').innerText = Math.max(0, mbps).toFixed(2) + " Mbps";
-                    const jitterEl = document.getElementById('p-jitter');
-                    jitterEl.innerText = jitter.toFixed(1) + " ms";
-                    jitterEl.style.color = jitter > 30 ? "#ff4444" : "#fff"; // Red warning
-                    prevPartBytes = stat.bytesReceived;
-                }
-                if (stat.type === 'remote-outbound-rtp' || stat.type === 'candidate-pair') {
-                    const rtt = (stat.currentRoundTripTime || stat.roundTripTime || 0) * 1000;
-                    if (rtt > 0) {
-                        const latEl = document.getElementById('p-latency');
-                        latEl.innerText = rtt.toFixed(0) + " ms";
-                        latEl.style.color = rtt > 200 ? "#ff4444" : "#fff";
-                        document.getElementById('h-latency').innerText = rtt.toFixed(0) + " ms";
-                    }
+                if (stat.type === "inbound-rtp" && stat.kind === "video") {
+                    partBytes += stat.bytesReceived || 0;
+                    jitterMs = (stat.jitter || 0) * 1000;
+                    rttMs =
+                        ((stat.roundTripTime || stat.currentRoundTripTime) || 0) * 1000;
                 }
             });
-        });
+
+            const partMbps =
+                ((partBytes - prevPartBytes) * 8) / (deltaSeconds * 1_000_000);
+
+            prevPartBytes = partBytes;
+
+            document.getElementById("p-bitrate").innerText =
+                Math.max(partMbps, 0).toFixed(2) + " Mbps";
+
+            document.getElementById("p-jitter").innerText =
+                jitterMs.toFixed(1) + " ms";
+
+            document.getElementById("p-latency").innerText =
+                rttMs.toFixed(0) + " ms";
+
+            document.getElementById("h-latency").innerText =
+                rttMs.toFixed(0) + " ms";
+        }
     }, 1000);
 }
+
 
 // 3. Recording Timer Logic
 function updateTimer() {
