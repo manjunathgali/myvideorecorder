@@ -36,7 +36,7 @@ function createMeter(stream, meterId) {
     update();
 }
 
-/* ================= NETWORK STATS - IMPROVED & MORE ACCURATE ================= */
+/* ================= NETWORK STATS - FIXED TO INCLUDE ALL TRAFFIC ================= */
 let lastBytesSent = 0;
 let lastBytesRecv = 0;
 let lastPacketsLost = 0;
@@ -60,11 +60,11 @@ function startNetworkMonitoring() {
         let totalPackets = 0;
 
         try {
-            // Publisher (upload)
+            // Publisher (upload) - Sum all outbound-rtp (video + audio)
             if (room.engine.pcManager.publisher?.pc) {
                 const stats = await room.engine.pcManager.publisher.pc.getStats();
                 stats.forEach(report => {
-                    if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                    if (report.type === 'outbound-rtp') {
                         totalBytesSent += report.bytesSent || 0;
                         packetsLost += report.packetsLost || 0;
                         totalPackets += report.packetsSent || 0;
@@ -75,11 +75,11 @@ function startNetworkMonitoring() {
                 });
             }
 
-            // Subscriber (download)
+            // Subscriber (download) - Sum all inbound-rtp (video + audio)
             if (room.engine.pcManager.subscriber?.pc) {
                 const stats = await room.engine.pcManager.subscriber.pc.getStats();
                 stats.forEach(report => {
-                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                    if (report.type === 'inbound-rtp') {
                         totalBytesReceived += report.bytesReceived || 0;
                         jitter = Math.max(jitter, (report.jitter || 0) * 1000);
                         packetsLost += report.packetsLost || 0;
