@@ -1,4 +1,4 @@
-const { Room, RoomEvent, VideoPresets, Track } = LivekitClient;
+const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;
 
 let room;
 let mediaRecorder;
@@ -7,25 +7,20 @@ let audioCtx;
 let timerInterval;
 let secondsElapsed = 0;
 
-/* ================= AUDIO CONTEXT ================= */
+// --- AUDIO CONTEXT ---
 function ensureAudioContext() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 }
 
-/* ================= AUDIO METER ================= */
+// --- AUDIO METER ---
 function createMeter(stream, meterId) {
     ensureAudioContext();
-
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
-
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const meter = document.getElementById(meterId);
-
     function update() {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
@@ -36,18 +31,12 @@ function createMeter(stream, meterId) {
     update();
 }
 
-/* ================= NETWORK STATS ================= */
-let lastBytesSent = 0;
-let lastBytesRecv = 0;
-let lastTs = performance.now();
+// --- NETWORK MONITORING ---
+let lastBytesSent = 0, lastBytesRecv = 0, lastTs = performance.now();
 
 function classifyQuality({ bandwidth, latency, jitter, packetLoss }) {
-    if (packetLoss > 2 || latency > 200 || jitter > 30 || bandwidth < 0.3) {
-        return { label: "Poor", color: "#ff4444" };
-    }
-    if (packetLoss > 1 || latency > 100 || jitter > 20 || bandwidth < 1) {
-        return { label: "Warning", color: "#ffaa00" };
-    }
+    if (packetLoss > 2 || latency > 200 || jitter > 30 || bandwidth < 0.3) return { label: "Poor", color: "#ff4444" };
+    if (packetLoss > 1 || latency > 100 || jitter > 20 || bandwidth < 1) return { label: "Warning", color: "#ffaa00" };
     return { label: "Good", color: "#00c853" };
 }
 
@@ -59,14 +48,8 @@ function startNetworkMonitoring() {
         const deltaSec = (now - lastTs) / 1000;
         lastTs = now;
 
-        let sent = 0;
-        let recv = 0;
-        let rttMs = 0;
-        let jitterMs = 0;
-        let packetsLost = 0;
-        let packetsTotal = 0;
+        let sent = 0, recv = 0, rttMs = 0, jitterMs = 0, packetsLost = 0, packetsTotal = 0;
 
-        // ---------- UPLOAD ----------
         const pubPC = room.engine.pcManager.publisher?.pc;
         if (pubPC) {
             const stats = await pubPC.getStats();
@@ -82,14 +65,11 @@ function startNetworkMonitoring() {
             });
         }
 
-        // ---------- DOWNLOAD ----------
         const subPC = room.engine.pcManager.subscriber?.pc;
         if (subPC) {
             const stats = await subPC.getStats();
             stats.forEach(stat => {
-                if (stat.type === "candidate-pair" && stat.state === "succeeded") {
-                    recv += stat.bytesReceived || 0;
-                }
+                if (stat.type === "candidate-pair" && stat.state === "succeeded") recv += stat.bytesReceived || 0;
                 if (stat.type === "inbound-rtp" && stat.kind === "video") {
                     jitterMs = (stat.jitter || 0) * 1000;
                     packetsTotal += stat.packetsReceived || 0;
@@ -98,43 +78,28 @@ function startNetworkMonitoring() {
             });
         }
 
-        // ---------- METRICS ----------
         const hostMbps = ((sent - lastBytesSent) * 8) / (deltaSec * 1_000_000);
         const partMbps = ((recv - lastBytesRecv) * 8) / (deltaSec * 1_000_000);
-        lastBytesSent = sent;
-        lastBytesRecv = recv;
+        lastBytesSent = sent; lastBytesRecv = recv;
         const packetLossPct = packetsTotal > 0 ? (packetsLost / packetsTotal) * 100 : 0;
+        const hostQuality = classifyQuality({ bandwidth: hostMbps, latency: rttMs, jitter: jitterMs, packetLoss: packetLossPct });
 
-        const hostQuality = classifyQuality({
-            bandwidth: hostMbps,
-            latency: rttMs,
-            jitter: jitterMs,
-            packetLoss: packetLossPct
-        });
-
-        // ---------- UI ----------
         document.getElementById("h-bitrate").innerText = hostMbps.toFixed(2) + " Mbps";
         document.getElementById("p-bitrate").innerText = partMbps.toFixed(2) + " Mbps";
-
         document.getElementById("h-latency").innerText = rttMs.toFixed(0) + " ms";
         document.getElementById("p-latency").innerText = rttMs.toFixed(0) + " ms";
-
         document.getElementById("h-jitter").innerText = jitterMs.toFixed(1) + " ms";
         document.getElementById("p-jitter").innerText = jitterMs.toFixed(1) + " ms";
-
         document.getElementById("h-packet-loss").innerText = packetLossPct.toFixed(2) + " %";
         document.getElementById("p-packet-loss").innerText = packetLossPct.toFixed(2) + " %";
-
         document.getElementById("h-network-quality").innerText = hostQuality.label;
         document.getElementById("h-network-quality").style.color = hostQuality.color;
-
         document.getElementById("p-network-quality").innerText = hostQuality.label;
         document.getElementById("p-network-quality").style.color = hostQuality.color;
-
     }, 1000);
 }
 
-/* ================= RECORD TIMER ================= */
+// --- RECORD TIMER ---
 function updateTimer() {
     secondsElapsed++;
     const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, "0");
@@ -142,7 +107,7 @@ function updateTimer() {
     document.getElementById("record-timer").innerText = `REC ${mins}:${secs}`;
 }
 
-/* ================= START ================= */
+// --- START HOST ---
 async function start() {
     try {
         const identity = "host-" + Math.floor(Math.random() * 1000);
@@ -152,26 +117,20 @@ async function start() {
         room = new Room({ adaptiveStream: true, dynacast: true });
 
         room.on(RoomEvent.TrackSubscribed, track => {
-            if (track.kind === Track.Kind.Video) {
-                track.attach(document.getElementById("remote-video"));
-            }
-            if (track.kind === Track.Kind.Audio) {
-                createMeter(new MediaStream([track.mediaStreamTrack]), "remote-meter");
-            }
+            if (track.kind === Track.Kind.Video) track.attach(document.getElementById("remote-video"));
+            if (track.kind === Track.Kind.Audio) createMeter(new MediaStream([track.mediaStreamTrack]), "remote-meter");
         });
 
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        await room.localParticipant.setCameraEnabled(true, { resolution: VideoPresets.h1080.resolution });
+        await room.localParticipant.setCameraEnabled(true, { resolution: VideoPresets.h1080.resolution, frameRate: 30 });
         await room.localParticipant.setMicrophoneEnabled(true);
 
         const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
         camPub?.videoTrack?.attach(document.getElementById("local-video"));
 
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-        if (micPub?.audioTrack) {
-            createMeter(new MediaStream([micPub.audioTrack.mediaStreamTrack]), "local-meter");
-        }
+        if (micPub?.audioTrack) createMeter(new MediaStream([micPub.audioTrack.mediaStreamTrack]), "local-meter");
 
         startNetworkMonitoring();
     } catch (err) {
@@ -179,7 +138,7 @@ async function start() {
     }
 }
 
-/* ================= RECORDING ================= */
+// --- RECORDING ---
 const startBtn = document.getElementById("start-btn");
 const stopBtn = document.getElementById("stop-btn");
 
@@ -191,22 +150,16 @@ startBtn.onclick = async () => {
     const remoteVid = document.getElementById("remote-video");
 
     const canvas = document.createElement("canvas");
-    canvas.width = 1920;
-    canvas.height = 1080;
+    canvas.width = 1920; canvas.height = 1080;
     const ctx = canvas.getContext("2d");
-
     const dest = audioCtx.createMediaStreamDestination();
 
     const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-    if (micPub?.audioTrack) {
-        audioCtx.createMediaStreamSource(new MediaStream([micPub.audioTrack.mediaStreamTrack])).connect(dest);
-    }
+    if (micPub?.audioTrack) audioCtx.createMediaStreamSource(new MediaStream([micPub.audioTrack.mediaStreamTrack])).connect(dest);
 
     room.remoteParticipants.forEach(p => {
         p.getTrackPublications().forEach(pub => {
-            if (pub.audioTrack?.isSubscribed) {
-                audioCtx.createMediaStreamSource(new MediaStream([pub.audioTrack.mediaStreamTrack])).connect(dest);
-            }
+            if (pub.audioTrack?.isSubscribed) audioCtx.createMediaStreamSource(new MediaStream([pub.audioTrack.mediaStreamTrack])).connect(dest);
         });
     });
 
@@ -219,13 +172,9 @@ startBtn.onclick = async () => {
         requestAnimationFrame(draw);
     }
 
-    const combinedStream = new MediaStream([
-        ...canvas.captureStream(30).getVideoTracks(),
-        ...dest.stream.getAudioTracks()
-    ]);
+    const combinedStream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
 
     mediaRecorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9", videoBitsPerSecond: 8_000_000 });
-
     mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
 
     mediaRecorder.onstop = () => {
@@ -240,7 +189,6 @@ startBtn.onclick = async () => {
         a.click();
         recordedChunks = [];
 
-        // Enable Start, disable Stop
         startBtn.disabled = false;
         stopBtn.disabled = true;
     };
@@ -253,8 +201,7 @@ startBtn.onclick = async () => {
     stopBtn.disabled = false;
 };
 
-// Stop button simply triggers recorder stop
 stopBtn.onclick = () => mediaRecorder.stop();
 
-/* ================= BOOT ================= */
+// --- BOOT ---
 start();
