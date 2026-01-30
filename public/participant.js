@@ -11,7 +11,8 @@ const MODES = {
         codec: "vp9",
         width: 1920,
         height: 1080,
-        maxBitrate: 6_000_000,
+        fps: 30,
+        maxBitrate: 4_000_000,
         simulcast: true,
         dynacast: true
     },
@@ -20,6 +21,7 @@ const MODES = {
         codec: "vp8",
         width: 1280,
         height: 720,
+        fps: 30,
         maxBitrate: 2_500_000,
         simulcast: true,
         dynacast: true
@@ -29,6 +31,7 @@ const MODES = {
         codec: "vp8",
         width: 640,
         height: 360,
+        fps: 15,
         maxBitrate: 500_000,
         simulcast: false, // Save CPU
         dynacast: false
@@ -51,7 +54,7 @@ window.startParticipant = async function (modeName = 'balanced') {
             videoCodec: currentModeConfig.codec,
             videoEncoding: {
                 maxBitrate: currentModeConfig.maxBitrate,
-                maxFramerate: 30,
+                maxFramerate: currentModeConfig.fps,
             }
         };
 
@@ -70,7 +73,13 @@ window.startParticipant = async function (modeName = 'balanced') {
             if (currentModeConfig.height >= 1080) {
                 publishDefaults.videoSimulcastLayers.push(VideoPresets.h1080);
             }
-            publishDefaults.videoEncoding.scalabilityMode = "L3T3";
+
+            // Scalability Mode: L3T3 for VP9 (SVC), L1T3 for VP8 (Simulcast with Temporal Layers)
+            if (currentModeConfig.codec === 'vp9') {
+                publishDefaults.videoEncoding.scalabilityMode = "L3T3";
+            } else {
+                publishDefaults.videoEncoding.scalabilityMode = "L1T3";
+            }
         } else {
             publishDefaults.videoSimulcastLayers = []; // No simulcast
             publishDefaults.videoEncoding.scalabilityMode = "L1T3"; // No spatial layers
@@ -131,14 +140,23 @@ window.switchCamera = async function (facingMode = 'user') {
 
     try {
         // Use the current mode's resolution preference
-        const widthIdeal = currentModeConfig ? currentModeConfig.width : 1280;
-        const heightIdeal = currentModeConfig ? currentModeConfig.height : 720;
+        let widthIdeal = currentModeConfig ? currentModeConfig.width : 1280;
+        let heightIdeal = currentModeConfig ? currentModeConfig.height : 720;
+        const fpsIdeal = currentModeConfig ? currentModeConfig.fps : 30;
+
+        // Smart Portrait Mode: Swap width/height if device is vertical
+        if (window.innerWidth < window.innerHeight) {
+            const temp = widthIdeal;
+            widthIdeal = heightIdeal;
+            heightIdeal = temp;
+        }
 
         const constraints = {
             video: {
                 facingMode: facingMode,
                 width: { ideal: widthIdeal },
-                height: { ideal: heightIdeal }
+                height: { ideal: heightIdeal },
+                frameRate: { ideal: fpsIdeal }
             }
         };
 
