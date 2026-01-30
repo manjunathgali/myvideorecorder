@@ -1,40 +1,91 @@
 const { Room, RoomEvent, Track, VideoPresets } = LivekitClient;
 
 let room;
+let currentModeConfig = null;
 
 window.room = null;
 
-async function startParticipant() {
+const MODES = {
+    high: {
+        label: "Premium",
+        codec: "vp9",
+        width: 1920,
+        height: 1080,
+        maxBitrate: 6_000_000,
+        simulcast: true,
+        dynacast: true
+    },
+    balanced: {
+        label: "Balanced",
+        codec: "vp8",
+        width: 1280,
+        height: 720,
+        maxBitrate: 2_500_000,
+        simulcast: true,
+        dynacast: true
+    },
+    performance: {
+        label: "Performance",
+        codec: "vp8",
+        width: 640,
+        height: 360,
+        maxBitrate: 500_000,
+        simulcast: false, // Save CPU
+        dynacast: false
+    }
+};
+
+window.startParticipant = async function (modeName = 'balanced') {
     try {
+        currentModeConfig = MODES[modeName] || MODES.balanced;
+        console.log(`Starting in ${currentModeConfig.label} mode`);
+
+        if (window.updateStatus) window.updateStatus(`Connecting (${currentModeConfig.label})...`);
+
         const identity = "participant-" + Math.floor(Math.random() * 1000);
         const response = await fetch(`/api/get-token?room=my-room&identity=${identity}`);
         const { token } = await response.json();
 
+        // Configure Publish Defaults based on Mode
+        const publishDefaults = {
+            videoCodec: currentModeConfig.codec,
+            videoEncoding: {
+                maxBitrate: currentModeConfig.maxBitrate,
+                maxFramerate: 30,
+            }
+        };
+
+        // Add backup codec always
+        if (currentModeConfig.codec === 'vp9') {
+            publishDefaults.backupCodec = { codec: 'vp8' };
+        }
+
+        // Configure Simulcast (only for high/balanced)
+        if (currentModeConfig.simulcast) {
+            publishDefaults.videoSimulcastLayers = [
+                VideoPresets.h360,
+                VideoPresets.h720
+            ];
+            // Add 1080p layer only if high mode
+            if (currentModeConfig.height >= 1080) {
+                publishDefaults.videoSimulcastLayers.push(VideoPresets.h1080);
+            }
+            publishDefaults.videoEncoding.scalabilityMode = "L3T3";
+        } else {
+            publishDefaults.videoSimulcastLayers = []; // No simulcast
+            publishDefaults.videoEncoding.scalabilityMode = "L1T3"; // No spatial layers
+        }
+
         room = new Room({
             adaptiveStream: true,
-            dynacast: true,
+            dynacast: currentModeConfig.dynacast,
             expLowLatency: true,
             audioCaptureDefaults: {
                 noiseSuppression: true,
                 echoCancellation: true,
                 autoGainControl: true
             },
-            publishDefaults: {
-                videoCodec: "vp9",
-                backupCodec: { codec: "vp8" },
-                videoSimulcastLayers: [
-                    VideoPresets.h360,
-                    VideoPresets.h720,
-                    VideoPresets.h1080,
-                    VideoPresets.h1440
-                ],
-                bitrateLimit: 0,
-                videoEncoding: {
-                    maxBitrate: 6000000,
-                    maxFramerate: 30,
-                    scalabilityMode: "L3T3"
-                }
-            }
+            publishDefaults: publishDefaults
         });
 
         window.room = room;
@@ -51,33 +102,43 @@ async function startParticipant() {
             }
         });
 
+        // Use the token to connect
+        // Ideally this URL comes from the API too, but using hardcoded for now as per previous
         await room.connect("wss://my-first-app-mwgdyws7.livekit.cloud", token);
 
-        await switchCamera('user');  // Start with front camera
+        await switchCamera('user');  // Start with front camera using new constraints
 
         await room.localParticipant.setMicrophoneEnabled(true);
 
-        if (window.updateStatus) window.updateStatus("Connected – Max Quality");
+        if (window.updateStatus) window.updateStatus(`Connected – ${currentModeConfig.label}`);
         console.log("Participant connected");
     } catch (err) {
         console.error("Participant error:", err);
         alert("Connection failed: " + err.message);
         if (window.updateStatus) window.updateStatus("Error");
+
+        // Reset UI if failed
+        document.getElementById('join-controls').style.display = 'flex';
+        document.getElementById('incall-controls').style.display = 'none';
     }
 }
 
-window.switchCamera = async function(facingMode = 'user') {
+window.switchCamera = async function (facingMode = 'user') {
     if (!room || !room.localParticipant) {
         console.warn("Room not ready");
         return false;
     }
 
     try {
+        // Use the current mode's resolution preference
+        const widthIdeal = currentModeConfig ? currentModeConfig.width : 1280;
+        const heightIdeal = currentModeConfig ? currentModeConfig.height : 720;
+
         const constraints = {
             video: {
                 facingMode: facingMode,
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                width: { ideal: widthIdeal },
+                height: { ideal: heightIdeal }
             }
         };
 
@@ -90,7 +151,8 @@ window.switchCamera = async function(facingMode = 'user') {
             await cameraPub.track.replaceTrack(newVideoTrack);
         } else {
             await room.localParticipant.publishTrack(newVideoTrack, {
-                source: Track.Source.Camera
+                source: Track.Source.Camera,
+                // Ensure the track inherits the room's publish defaults or we set them explicitly here if needed
             });
         }
 
@@ -114,9 +176,9 @@ window.switchCamera = async function(facingMode = 'user') {
         return true;
     } catch (err) {
         console.error("Camera switch failed:", err);
-        alert("Failed to switch camera");
+        alert("Failed to switch camera: " + err.message);
         return false;
     }
 };
 
-startParticipant();
+// Removed auto-start: startParticipant();

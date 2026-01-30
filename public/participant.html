@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -50,11 +51,13 @@
     }
 
     #local-video {
-      transform: scaleX(-1); /* Mirror front camera */
+      transform: scaleX(-1);
+      /* Mirror front camera */
     }
 
     #local-video.rear {
-      transform: scaleX(1); /* No mirror for rear camera */
+      transform: scaleX(1);
+      /* No mirror for rear camera */
     }
 
     .controls {
@@ -90,45 +93,81 @@
     }
   </style>
 </head>
+
 <body>
-<h2>Participant View</h2>
+  <h2>Participant View</h2>
 
-<div class="status" id="status">Connecting...</div>
+  <div class="status" id="status">Ready to Connect</div>
 
-<div class="video-container">
-  <video id="remote-video" autoplay playsinline></video>
-  <video id="local-video" autoplay muted playsinline></video>
-</div>
+  <!-- Join Controls -->
+  <div class="controls" id="join-controls"
+    style="flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px;">
+    <label for="quality-mode" style="color: #ccc;">Performance Mode:</label>
+    <select id="quality-mode" style="padding: 10px; border-radius: 8px; font-size: 1rem;">
+      <option value="high">Premium (VP9 • 1440p)</option>
+      <option value="balanced" selected>Balanced (VP8 • 720p)</option>
+      <option value="performance">Performance (VP8 • 360p)</option>
+    </select>
+    <button id="join-btn" style="background: #00c853;">Join Room</button>
+  </div>
 
-<div class="controls">
-  <button id="camera-switch-btn">Switch to Rear Camera</button>
-</div>
+  <!-- In-Call Controls (Hidden initially) -->
+  <div class="controls" id="incall-controls" style="display: none;">
+    <button id="camera-switch-btn">Switch to Rear Camera</button>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-<script src="participant.js"></script>
+  <div class="video-container">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay muted playsinline></video>
+  </div>
 
-<script>
-  // Camera switch button
-  document.getElementById('camera-switch-btn').onclick = async () => {
-    if (!window.switchCamera) {
-      alert("Camera function not ready");
-      return;
-    }
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+  <script src="participant.js"></script>
 
-    const currentText = document.getElementById('camera-switch-btn').textContent;
-    const newMode = currentText.includes("Rear") ? 'environment' : 'user';
+  <script>
+    // Elements
+    const joinControls = document.getElementById('join-controls');
+    const incallControls = document.getElementById('incall-controls');
+    const joinBtn = document.getElementById('join-btn');
+    const qualitySelect = document.getElementById('quality-mode');
+    const cameraBtn = document.getElementById('camera-switch-btn');
 
-    const success = await window.switchCamera(newMode);
-    if (!success) {
-      console.warn("Camera switch failed");
-    }
-  };
+    // Join Button
+    joinBtn.onclick = async () => {
+      const mode = qualitySelect.value;
+      joinControls.style.display = 'none';
+      incallControls.style.display = 'flex';
 
-  // Status update
-  window.updateStatus = (msg) => {
-    document.getElementById('status').textContent = msg;
-  };
-  window.updateStatus("Loading...");
-</script>
+      if (window.startParticipant) {
+        await window.startParticipant(mode);
+      } else {
+        alert("Application not ready");
+        joinControls.style.display = 'flex';
+        incallControls.style.display = 'none';
+      }
+    };
+
+    // Camera switch button
+    cameraBtn.onclick = async () => {
+      if (!window.switchCamera) {
+        alert("Camera function not ready");
+        return;
+      }
+
+      const currentText = cameraBtn.textContent;
+      const newMode = currentText.includes("Rear") ? 'environment' : 'user';
+
+      const success = await window.switchCamera(newMode);
+      if (!success) {
+        console.warn("Camera switch failed");
+      }
+    };
+
+    // Status update
+    window.updateStatus = (msg) => {
+      document.getElementById('status').textContent = msg;
+    };
+  </script>
 </body>
+
 </html>
