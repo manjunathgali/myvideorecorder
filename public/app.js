@@ -277,10 +277,27 @@ startBtn.onclick = async () => {
         ...dest.stream.getAudioTracks()
     ]);
 
-    let mimeType = "video/webm;codecs=vp9,opus";
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "video/webm;codecs=vp8,opus";
+    // Priority list for MIME types (MP4 preferred)
+    const mimeTypes = [
+        "video/mp4;codecs=avc1,mp4a.40.2", // H.264 + AAC
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm"
+    ];
+
+    let mimeType = "";
+    for (const type of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+            mimeType = type;
+            break;
+        }
     }
+
+    // Fallback if nothing matches (unlikely)
+    if (!mimeType) mimeType = "video/webm";
+
+    console.log("Selected MIME Type:", mimeType);
 
     mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType: mimeType,
@@ -301,7 +318,11 @@ startBtn.onclick = async () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `Meeting-HQ-${Date.now()}.webm`;
+
+        // Determine extension based on selected MIME type
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+        a.download = `Meeting-HQ-${Date.now()}.${ext}`;
+
         a.click();
         URL.revokeObjectURL(url);
 
